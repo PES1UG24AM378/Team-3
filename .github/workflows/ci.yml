@@ -37,8 +37,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          npm ci --prefix backend
-          npm ci --prefix frontend
+          npm ci
 
       - name: Check Environment Variables Template
         run: |
