@@ -8,7 +8,7 @@
     "dev": "node --watch src/server.js",
     "lint": "node -e \"console.log('Backend syntax check passed')\"",
     "build": "node -e \"console.log('Backend build check passed')\"",
-    "test": "node --test test/**/*.test.js",
+    "test": "node --test",
     "db:migrate": "node src/db/migrate.js",
     "db:seed": "node src/db/seed.js"
   },
