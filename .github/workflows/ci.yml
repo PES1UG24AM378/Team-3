@@ -1,0 +1,75 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-lint:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tutoring_scheduler
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm ci
+
+      - name: Check Environment Variables Template
+        run: |
+          test -f .env.example
+          test -f backend/.env.example
+          test -f frontend/.env.example
+
+      - name: Run Backend Syntax and Linter Check
+        run: npm run lint --prefix backend
+
+      - name: Run Database Migrations
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/tutoring_scheduler
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: tutoring_scheduler
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+        run: npm run db:migrate --prefix backend
+
+      - name: Run Backend Tests
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/tutoring_scheduler
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: tutoring_scheduler
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+        run: npm test --prefix backend
+
+      - name: Build Frontend Application
+        run: npm run build --prefix frontend
