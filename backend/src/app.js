@@ -6,6 +6,7 @@ const { errorHandler, AppError } = require('./middleware/error');
 const healthRoutes = require('./routes/health.routes');
 const slotRoutes = require('./routes/slot.routes');
 const bookingRoutes = require('./routes/booking.routes');
+const profileRoutes = require('./routes/profile.routes');
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.get('/health', (req, res) => res.redirect('/api/health'));
 app.use(`${config.apiPrefix}/health`, healthRoutes);
 app.use(`${config.apiPrefix}/slots`, slotRoutes);
 app.use(`${config.apiPrefix}/bookings`, bookingRoutes);
+app.use(`${config.apiPrefix}/profile`, profileRoutes);
 
 // 404 Handler for undefined routes
 app.use((req, res, next) => {
