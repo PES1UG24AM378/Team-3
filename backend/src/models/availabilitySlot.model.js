@@ -25,6 +25,24 @@ const AvailabilitySlotModel = {
   },
 
   /**
+   * Update an existing slot's details (used for editing — TUT-F-011 range)
+   */
+  async update(id, { subject, startTimeUtc, endTimeUtc, durationMinutes }) {
+    const res = await db.query(
+      `UPDATE availability_slots
+       SET subject = $2,
+           start_time = $3,
+           end_time = $4,
+           duration_minutes = $5,
+           updated_at = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
+       WHERE id = $1
+       RETURNING *`,
+      [id, subject, startTimeUtc, endTimeUtc, durationMinutes]
+    );
+    return res.rows[0];
+  },
+
+  /**
    * Search available slots with filters (TUT-F-020)
    */
   async search({ subject, fromUtc, toUtc, minRating }) {
