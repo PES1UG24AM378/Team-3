@@ -44,7 +44,7 @@ test('GET /api/nonexistent-route should return unified 404 error format', async 
 test('POST /api/slots with missing fields should return 422 with validation errors', async () => {
   const res = await fetch(`${baseUrl}/api/slots`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-user-id': '1' },
     body: JSON.stringify({})
   });
   assert.strictEqual(res.status, 422);
