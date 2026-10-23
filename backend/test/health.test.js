@@ -52,3 +52,24 @@ test('POST /api/slots with missing fields should return 422 with validation erro
   assert.strictEqual(data.error.code, 'VALIDATION_ERROR');
   assert.ok(Array.isArray(data.error.details));
 });
+
+test('POST /api/bookings requires an authenticated identity', async () => {
+  const res = await fetch(`${baseUrl}/api/bookings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slotId: 1 })
+  });
+  assert.strictEqual(res.status, 401);
+  const data = await res.json();
+  assert.strictEqual(data.error.code, 'AUTHENTICATION_REQUIRED');
+});
+
+test('GET /api/slots rejects invalid search filters before querying the database', async () => {
+  const invalidDate = await fetch(`${baseUrl}/api/slots?from=not-a-date`);
+  assert.strictEqual(invalidDate.status, 422);
+  assert.strictEqual((await invalidDate.json()).error.code, 'VALIDATION_ERROR');
+
+  const invalidRating = await fetch(`${baseUrl}/api/slots?minRating=6`);
+  assert.strictEqual(invalidRating.status, 422);
+  assert.strictEqual((await invalidRating.json()).error.code, 'VALIDATION_ERROR');
+});

@@ -1,4 +1,5 @@
 const db = require('./index');
+const bcrypt = require('bcryptjs');
 
 async function seed() {
   console.log('Seeding initial data for Team 3 Peer Tutoring Scheduler...');
@@ -7,16 +8,26 @@ async function seed() {
     await client.query('BEGIN');
 
     // Seed test users (passwords are dummy hashes for development)
+    const [alicePassword, bobPassword, adminPassword] = await Promise.all([
+      bcrypt.hash('alice-password', 10),
+      bcrypt.hash('bob-password', 10),
+      bcrypt.hash('admin-password', 10)
+    ]);
     const userInsert = `
       INSERT INTO users (name, email, password_hash, role, is_verified)
-      VALUES 
-        ('Alice Johnson', 'alice.tutor@university.edu', '$2b$10$dummyhashalice1234567890123456789012345678901234567890', 'tutor', TRUE),
-        ('Bob Smith', 'bob.tutee@university.edu', '$2b$10$dummyhashbob1234567890123456789012345678901234567890', 'tutee', TRUE),
-        ('Carol Admin', 'admin@university.edu', '$2b$10$dummyhashadmin1234567890123456789012345678901234567890', 'admin', TRUE)
-      ON CONFLICT (email) DO NOTHING
+      VALUES ($1, 'alice.tutor@university.edu', $2, 'tutor', TRUE),
+             ($3, 'bob.tutee@university.edu', $4, 'tutee', TRUE),
+             ($5, 'admin@university.edu', $6, 'admin', TRUE)
+      ON CONFLICT (email) DO UPDATE SET
+        password_hash = EXCLUDED.password_hash,
+        is_verified = TRUE
       RETURNING id, email;
     `;
-    const userRes = await client.query(userInsert);
+    await client.query(userInsert, [
+      'Alice Johnson', alicePassword,
+      'Bob Smith', bobPassword,
+      'Carol Admin', adminPassword
+    ]);
     console.log(`Users seeded/verified.`);
 
     // Fetch Alice

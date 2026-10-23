@@ -34,6 +34,7 @@ const AvailabilitySlotModel = {
       JOIN users u ON s.tutor_id = u.id
       LEFT JOIN tutor_profiles tp ON tp.user_id = u.id
       WHERE s.status = 'available'
+        AND s.start_time > CURRENT_TIMESTAMP
     `;
     const params = [];
 
@@ -52,7 +53,7 @@ const AvailabilitySlotModel = {
       queryText += ` AND s.end_time <= $${params.length}`;
     }
 
-    if (minRating) {
+    if (minRating !== null && minRating !== undefined) {
       params.push(minRating);
       queryText += ` AND COALESCE(tp.average_rating, 0) >= $${params.length}`;
     }

@@ -14,7 +14,9 @@ router.get(
   '/',
   validate({
     query: {
-      minRating: { type: 'number' }
+      from: { type: 'isoDate' },
+      to: { type: 'isoDate' },
+      minRating: { type: 'number', min: 0, max: 5 }
     }
   }),
   async (req, res, next) => {
