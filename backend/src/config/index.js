@@ -5,13 +5,18 @@ const path = require('path');
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 dotenv.config();
 
+const jwtSecret = process.env.JWT_SECRET || 'dev_insecure_jwt_secret_team3';
+if (process.env.NODE_ENV === 'production' && jwtSecret === 'dev_insecure_jwt_secret_team3') {
+  throw new Error('JWT_SECRET must be configured in production');
+}
+
 const config = {
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT, 10) || 5000,
   apiPrefix: process.env.API_PREFIX || '/api',
   clientOrigin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
   jwt: {
-    secret: process.env.JWT_SECRET || 'dev_insecure_jwt_secret_team3',
+    secret: jwtSecret,
     expiresIn: process.env.JWT_EXPIRES_IN || '7d'
   },
   db: {
