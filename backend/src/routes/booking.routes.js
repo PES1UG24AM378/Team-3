@@ -35,14 +35,20 @@ router.post(
 
 /**
  * @route GET /api/bookings/:id
- * @desc Retrieve booking details
+ * @desc Retrieve booking details (PRJ-SR-003: authorization check)
  */
-router.get('/:id', async (req, res, next) => {
+router.get('/:id', authenticate, async (req, res, next) => {
   try {
     const booking = await BookingModel.findById(req.params.id);
     if (!booking) {
       return next(new AppError('Booking not found', 404, 'BOOKING_NOT_FOUND'));
     }
+
+    // Only participants (tutor or tutee) or admin may view the booking record
+    if (booking.tutee_id !== req.user.id && booking.tutor_id !== req.user.id && req.user.role !== 'admin') {
+      return next(new AppError('Access forbidden: you are not a participant in this booking', 403, 'FORBIDDEN'));
+    }
+
     res.json({ data: booking });
   } catch (err) {
     next(err);
