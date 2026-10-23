@@ -98,6 +98,57 @@ function App() {
     }
   };
 
+  const [bookings, setBookings] = useState([]);
+  const [bookingFilter, setBookingFilter] = useState('upcoming');
+  const [bookingsLoading, setBookingsLoading] = useState(false);
+  const [actionMessage, setActionMessage] = useState(null);
+
+  const fetchBookings = async () => {
+    if (!authToken) return;
+    setBookingsLoading(true);
+    setActionMessage(null);
+    try {
+      const response = await fetch(`/api/bookings?status=${bookingFilter}`, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error?.message || 'Failed to load bookings');
+      setBookings(payload.data || []);
+    } catch (err) {
+      setActionMessage({ type: 'error', text: err.message });
+      setBookings([]);
+    } finally {
+      setBookingsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'dashboard' && authToken) {
+      fetchBookings();
+    }
+  }, [activeTab, bookingFilter, authToken]);
+
+  const cancelBooking = async (bookingId) => {
+    if (!window.confirm('Are you sure you want to cancel this booking?')) return;
+    try {
+      const response = await fetch(`/api/bookings/${bookingId}/cancel`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ reason: 'Cancelled from dashboard' })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error?.message || 'Failed to cancel booking');
+      setActionMessage({ type: 'success', text: payload.message });
+      fetchBookings();
+      searchSlots();
+    } catch (err) {
+      setActionMessage({ type: 'error', text: err.message });
+    }
+  };
+
   const isConnected = healthData && (healthData.status === 'ok' || healthData.status === 'degraded');
   const dbConnected = healthData?.database?.status === 'connected';
 
@@ -105,7 +156,7 @@ function App() {
     <div className="container">
       <header className="hero-header">
         <div className="badge">
-          <span>🚀</span> Team 3 • Shared Foundation (Issue #1)
+          <span>🚀</span> Team 3 • Shared Foundation (Issue #1 & #6)
         </div>
         <h1 className="title-gradient">Peer-to-Peer Tutoring Scheduler</h1>
         <p className="subtitle">
@@ -114,52 +165,160 @@ function App() {
         </p>
       </header>
 
+      <nav className="tab-navigation">
+        <button
+          className={`tab-btn ${activeTab === 'overview' ? 'active' : ''}`}
+          onClick={() => setActiveTab('overview')}
+        >
+          🔍 Search & Book Slots
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
+          onClick={() => setActiveTab('dashboard')}
+        >
+          📅 My Bookings Dashboard
+        </button>
+      </nav>
+
       <main>
-        <section className="glass-card search-card" id="slot-search">
-          <div className="card-title">
-            <span>Find an available tutoring slot</span>
-            <span className="result-count">{slots.length} result{slots.length === 1 ? '' : 's'}</span>
-          </div>
-          <form className="search-form" onSubmit={searchSlots}>
-            <label>Subject<input value={filters.subject} onChange={(e) => setFilters({ ...filters, subject: e.target.value })} placeholder="e.g. Mathematics" /></label>
-            <label>From<input type="date" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} /></label>
-            <label>To<input type="date" value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} /></label>
-            <label>Minimum tutor rating
-              <select value={filters.minRating} onChange={(e) => setFilters({ ...filters, minRating: e.target.value })}>
-                <option value="">Any rating</option>
-                {[4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating}+ stars</option>)}
-              </select>
-            </label>
-            <button className="btn search-button" type="submit" disabled={searchLoading}>{searchLoading ? 'Searching...' : 'Search slots'}</button>
-          </form>
-          <div className="booking-controls">
-            <label>Authenticated booking token<input type="password" value={authToken} onChange={(e) => setAuthToken(e.target.value)} placeholder="Bearer token from /api/auth/login" /></label>
-            {bookingMessage && <p className={bookingMessage.type === 'error' ? 'message error-message' : 'message success-message'}>{bookingMessage.text}</p>}
-          </div>
-          {searchError && <p className="message error-message">{searchError}</p>}
-          {!searchLoading && !searchError && slots.length === 0 && <p className="empty-state">No future, unbooked slots match these filters.</p>}
-          <div className="calendar-grid">
-            {Object.entries(slotsByDate).map(([date, dateSlots]) => (
-              <div className="calendar-day" key={date}>
-                <h3>{date}</h3>
-                {dateSlots.map((slot) => (
-                  <article className="slot-card" key={slot.id}>
+        {activeTab === 'overview' && (
+          <section className="glass-card search-card" id="slot-search">
+            <div className="card-title">
+              <span>Find an available tutoring slot</span>
+              <span className="result-count">{slots.length} result{slots.length === 1 ? '' : 's'}</span>
+            </div>
+            <form className="search-form" onSubmit={searchSlots}>
+              <label>Subject<input value={filters.subject} onChange={(e) => setFilters({ ...filters, subject: e.target.value })} placeholder="e.g. Mathematics" /></label>
+              <label>From<input type="date" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} /></label>
+              <label>To<input type="date" value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} /></label>
+              <label>Minimum tutor rating
+                <select value={filters.minRating} onChange={(e) => setFilters({ ...filters, minRating: e.target.value })}>
+                  <option value="">Any rating</option>
+                  {[4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating}+ stars</option>)}
+                </select>
+              </label>
+              <button className="btn search-button" type="submit" disabled={searchLoading}>{searchLoading ? 'Searching...' : 'Search slots'}</button>
+            </form>
+            <div className="booking-controls">
+              <label>Authenticated booking token<input type="password" value={authToken} onChange={(e) => setAuthToken(e.target.value)} placeholder="Bearer token from /api/auth/login" /></label>
+              {bookingMessage && <p className={bookingMessage.type === 'error' ? 'message error-message' : 'message success-message'}>{bookingMessage.text}</p>}
+            </div>
+            {searchError && <p className="message error-message">{searchError}</p>}
+            {!searchLoading && !searchError && slots.length === 0 && <p className="empty-state">No future, unbooked slots match these filters.</p>}
+            <div className="calendar-grid">
+              {Object.entries(slotsByDate).map(([date, dateSlots]) => (
+                <div className="calendar-day" key={date}>
+                  <h3>{date}</h3>
+                  {dateSlots.map((slot) => (
+                    <article className="slot-card" key={slot.id}>
+                      <div>
+                        <strong>{new Date(slot.start_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</strong>
+                        <span>{slot.duration_minutes} min · {slot.subject}</span>
+                      </div>
+                      <div className="slot-meta">
+                        <span>{slot.tutor_name} · ★ {Number(slot.tutor_rating).toFixed(1)}</span>
+                        <button className="btn book-button" onClick={() => bookSlot(slot.id)} disabled={bookingSlotId === slot.id}>
+                          {bookingSlotId === slot.id ? 'Booking...' : 'Book'}
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {activeTab === 'dashboard' && (
+          <section className="glass-card" id="my-bookings-dashboard">
+            <div className="card-title">
+              <span>My Bookings Dashboard (TUT-F-040)</span>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  className={`btn-secondary ${bookingFilter === 'upcoming' ? 'active' : ''}`}
+                  onClick={() => setBookingFilter('upcoming')}
+                >
+                  Upcoming
+                </button>
+                <button
+                  className={`btn-secondary ${bookingFilter === 'past' ? 'active' : ''}`}
+                  onClick={() => setBookingFilter('past')}
+                >
+                  Past & Cancelled
+                </button>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                Authenticated Token:
+                <input
+                  type="password"
+                  value={authToken}
+                  onChange={(e) => setAuthToken(e.target.value)}
+                  placeholder="Bearer token to load your bookings"
+                  style={{ marginLeft: '0.5rem', padding: '0.4rem', borderRadius: '4px', border: '1px solid var(--border-subtle)', background: 'rgba(0,0,0,0.2)', color: 'white' }}
+                />
+              </label>
+              <button className="btn" style={{ marginLeft: '0.5rem', padding: '0.4rem 0.8rem' }} onClick={fetchBookings}>
+                Refresh Bookings
+              </button>
+            </div>
+
+            {actionMessage && (
+              <p className={actionMessage.type === 'error' ? 'message error-message' : 'message success-message'}>
+                {actionMessage.text}
+              </p>
+            )}
+
+            {!authToken && (
+              <p className="empty-state">Please enter an authentication bearer token above to view your bookings.</p>
+            )}
+
+            {authToken && bookingsLoading && <p>Loading your bookings...</p>}
+
+            {authToken && !bookingsLoading && bookings.length === 0 && (
+              <p className="empty-state">No {bookingFilter} bookings found for your account.</p>
+            )}
+
+            {authToken && !bookingsLoading && bookings.length > 0 && (
+              <div className="bookings-list">
+                {bookings.map((b) => (
+                  <div className="booking-item-card" key={b.id}>
                     <div>
-                      <strong>{new Date(slot.start_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</strong>
-                      <span>{slot.duration_minutes} min · {slot.subject}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
+                        <strong style={{ fontSize: '1.05rem' }}>{b.subject}</strong>
+                        <span className={`status-badge badge-${b.status}`}>{b.status}</span>
+                      </div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                        Tutor: <strong>{b.tutor_name}</strong> | Tutee: <strong>{b.tutee_name}</strong>
+                      </div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: '0.2rem' }}>
+                        📅 {new Date(b.start_time).toLocaleString()} ({b.duration_minutes} mins)
+                      </div>
+                      {b.cancellation_reason && (
+                        <div style={{ color: '#f87171', fontSize: '0.78rem', marginTop: '0.25rem' }}>
+                          Reason / Note: {b.cancellation_reason}
+                        </div>
+                      )}
                     </div>
-                    <div className="slot-meta">
-                      <span>{slot.tutor_name} · ★ {Number(slot.tutor_rating).toFixed(1)}</span>
-                      <button className="btn book-button" onClick={() => bookSlot(slot.id)} disabled={bookingSlotId === slot.id}>
-                        {bookingSlotId === slot.id ? 'Booking...' : 'Book'}
-                      </button>
+
+                    <div className="booking-actions">
+                      {b.status === 'confirmed' && (
+                        <button
+                          className="btn-danger"
+                          onClick={() => cancelBooking(b.id)}
+                        >
+                          Cancel Booking
+                        </button>
+                      )}
                     </div>
-                  </article>
+                  </div>
                 ))}
               </div>
-            ))}
-          </div>
-        </section>
+            )}
+          </section>
+        )}
 
         <section className="grid-cards">
           {/* Backend Connectivity Status */}

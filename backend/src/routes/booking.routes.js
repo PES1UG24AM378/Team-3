@@ -34,6 +34,24 @@ router.post(
 );
 
 /**
+ * @route GET /api/bookings
+ * @desc Retrieve current authenticated user's bookings (TUT-F-040, PRJ-SR-003)
+ * Supports query param `status`: 'upcoming', 'past', or all
+ */
+router.get('/', authenticate, async (req, res, next) => {
+  try {
+    const { status, role } = req.query;
+    const bookings = await BookingModel.findByUserId(req.user.id, role || null, status || null);
+    res.json({
+      data: bookings,
+      count: bookings.length
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * @route GET /api/bookings/:id
  * @desc Retrieve booking details (PRJ-SR-003: authorization check)
  */
@@ -54,5 +72,103 @@ router.get('/:id', authenticate, async (req, res, next) => {
     next(err);
   }
 });
+
+/**
+ * @route PATCH /api/bookings/:id/cancel
+ * @desc Cancel existing booking with notice window check and late cancellation flag (TUT-F-023, PRJ-SR-003)
+ */
+router.patch(
+  '/:id/cancel',
+  authenticate,
+  validate({
+    body: {
+      reason: { type: 'string' }
+    }
+  }),
+  async (req, res, next) => {
+    try {
+      const { reason } = req.body;
+      const cancelledBooking = await BookingModel.cancelBooking({
+        bookingId: parseInt(req.params.id, 10),
+        userId: req.user.id,
+        userRole: req.user.role,
+        reason
+      });
+
+      res.json({
+        message: cancelledBooking.isLateCancellation
+          ? 'Booking cancelled with late cancellation notice flag'
+          : 'Booking successfully cancelled',
+        data: cancelledBooking
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * @route POST /api/bookings/:id/reschedule
+ * @desc Tutee proposes rescheduling to a new slot with the same tutor (TUT-F-024)
+ */
+router.post(
+  '/:id/reschedule',
+  authenticate,
+  validate({
+    body: {
+      newSlotId: { required: true, type: 'number' }
+    }
+  }),
+  async (req, res, next) => {
+    try {
+      const { newSlotId } = req.body;
+      const updatedBooking = await BookingModel.requestReschedule({
+        bookingId: parseInt(req.params.id, 10),
+        newSlotId,
+        tuteeId: req.user.id
+      });
+
+      res.status(200).json({
+        message: 'Rescheduling requested; awaiting tutor confirmation',
+        data: updatedBooking
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * @route PATCH /api/bookings/:id/reschedule/confirm
+ * @desc Tutor confirms or rejects rescheduling request (TUT-F-024)
+ */
+router.patch(
+  '/:id/reschedule/confirm',
+  authenticate,
+  validate({
+    body: {
+      confirmed: { required: true, type: 'boolean' }
+    }
+  }),
+  async (req, res, next) => {
+    try {
+      const { confirmed } = req.body;
+      const updatedBooking = await BookingModel.confirmReschedule({
+        bookingId: parseInt(req.params.id, 10),
+        tutorId: req.user.id,
+        confirmed
+      });
+
+      res.json({
+        message: confirmed
+          ? 'Rescheduling confirmed by tutor'
+          : 'Rescheduling request rejected by tutor',
+        data: updatedBooking
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 module.exports = router;
