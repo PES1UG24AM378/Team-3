@@ -186,6 +186,21 @@ All errors return consistent HTTP status codes (400, 401, 403, 404, 409, 422, 50
 }
 ```
 
+### Booking Authentication
+
+Booking requests must use a bearer token issued by `POST /api/auth/login`.
+The booking API derives the tutee identity from that verified token; `tuteeId`
+is not accepted from the request body.
+
+For the development seed users, the passwords are:
+
+- `alice.tutor@university.edu` / `alice-password`
+- `bob.tutee@university.edu` / `bob-password`
+- `admin@university.edu` / `admin-password`
+
+Do not use these development credentials outside a local environment. Production
+deployments must set a strong `JWT_SECRET`.
+
 ---
 
 ## 👥 Feature Branching & Handoff Guidelines

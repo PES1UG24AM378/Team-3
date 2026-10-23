@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 function App() {
   const [healthData, setHealthData] = useState(null);
@@ -6,6 +6,13 @@ function App() {
   const [error, setError] = useState(null);
   const [lastChecked, setLastChecked] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [filters, setFilters] = useState({ subject: '', from: '', to: '', minRating: '' });
+  const [slots, setSlots] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState(null);
+  const [authToken, setAuthToken] = useState('');
+  const [bookingSlotId, setBookingSlotId] = useState(null);
+  const [bookingMessage, setBookingMessage] = useState(null);
 
   const fetchHealth = async () => {
     setLoading(true);
@@ -27,6 +34,70 @@ function App() {
     fetchHealth();
   }, []);
 
+  const searchSlots = async (event) => {
+    event?.preventDefault();
+    setSearchLoading(true);
+    setSearchError(null);
+    setBookingMessage(null);
+
+    const params = new URLSearchParams();
+    if (filters.subject.trim()) params.set('subject', filters.subject.trim());
+    if (filters.from) params.set('from', new Date(`${filters.from}T00:00:00`).toISOString());
+    if (filters.to) params.set('to', new Date(`${filters.to}T23:59:59.999`).toISOString());
+    if (filters.minRating) params.set('minRating', filters.minRating);
+
+    try {
+      const response = await fetch(`/api/slots?${params.toString()}`);
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error?.message || 'Unable to search available slots');
+      setSlots(payload.data || []);
+    } catch (err) {
+      setSearchError(err.message);
+      setSlots([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    searchSlots();
+  }, []);
+
+  const slotsByDate = useMemo(() => slots.reduce((groups, slot) => {
+    const date = new Date(slot.start_time).toLocaleDateString(undefined, {
+      weekday: 'short', month: 'short', day: 'numeric'
+    });
+    groups[date] = groups[date] || [];
+    groups[date].push(slot);
+    return groups;
+  }, {}), [slots]);
+
+  const bookSlot = async (slotId) => {
+    if (!authToken) {
+      setBookingMessage({ type: 'error', text: 'Sign in and provide an authentication token before booking.' });
+      return;
+    }
+    setBookingSlotId(slotId);
+    setBookingMessage(null);
+    try {
+      const response = await fetch('/api/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ slotId })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error?.message || 'Unable to book this slot');
+      setBookingMessage({ type: 'success', text: 'Slot booked successfully.' });
+      await searchSlots();
+    } catch (err) {
+      setBookingMessage({ type: 'error', text: err.message });
+      await searchSlots();
+    } finally {
+      setBookingSlotId(null);
+    }
+  };
+
   const isConnected = healthData && (healthData.status === 'ok' || healthData.status === 'degraded');
   const dbConnected = healthData?.database?.status === 'connected';
 
@@ -44,6 +115,52 @@ function App() {
       </header>
 
       <main>
+        <section className="glass-card search-card" id="slot-search">
+          <div className="card-title">
+            <span>Find an available tutoring slot</span>
+            <span className="result-count">{slots.length} result{slots.length === 1 ? '' : 's'}</span>
+          </div>
+          <form className="search-form" onSubmit={searchSlots}>
+            <label>Subject<input value={filters.subject} onChange={(e) => setFilters({ ...filters, subject: e.target.value })} placeholder="e.g. Mathematics" /></label>
+            <label>From<input type="date" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} /></label>
+            <label>To<input type="date" value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} /></label>
+            <label>Minimum tutor rating
+              <select value={filters.minRating} onChange={(e) => setFilters({ ...filters, minRating: e.target.value })}>
+                <option value="">Any rating</option>
+                {[4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating}+ stars</option>)}
+              </select>
+            </label>
+            <button className="btn search-button" type="submit" disabled={searchLoading}>{searchLoading ? 'Searching...' : 'Search slots'}</button>
+          </form>
+          <div className="booking-controls">
+            <label>Authenticated booking token<input type="password" value={authToken} onChange={(e) => setAuthToken(e.target.value)} placeholder="Bearer token from /api/auth/login" /></label>
+            {bookingMessage && <p className={bookingMessage.type === 'error' ? 'message error-message' : 'message success-message'}>{bookingMessage.text}</p>}
+          </div>
+          {searchError && <p className="message error-message">{searchError}</p>}
+          {!searchLoading && !searchError && slots.length === 0 && <p className="empty-state">No future, unbooked slots match these filters.</p>}
+          <div className="calendar-grid">
+            {Object.entries(slotsByDate).map(([date, dateSlots]) => (
+              <div className="calendar-day" key={date}>
+                <h3>{date}</h3>
+                {dateSlots.map((slot) => (
+                  <article className="slot-card" key={slot.id}>
+                    <div>
+                      <strong>{new Date(slot.start_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</strong>
+                      <span>{slot.duration_minutes} min · {slot.subject}</span>
+                    </div>
+                    <div className="slot-meta">
+                      <span>{slot.tutor_name} · ★ {Number(slot.tutor_rating).toFixed(1)}</span>
+                      <button className="btn book-button" onClick={() => bookSlot(slot.id)} disabled={bookingSlotId === slot.id}>
+                        {bookingSlotId === slot.id ? 'Booking...' : 'Book'}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ))}
+          </div>
+        </section>
+
         <section className="grid-cards">
           {/* Backend Connectivity Status */}
           <div className="glass-card" id="backend-health-card">

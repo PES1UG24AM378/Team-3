@@ -2,6 +2,7 @@ const express = require('express');
 const { BookingModel } = require('../models');
 const { validate } = require('../middleware/validator');
 const { AppError } = require('../middleware/error');
+const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -13,14 +14,14 @@ router.post(
   '/',
   validate({
     body: {
-      slotId: { required: true, type: 'number' },
-      tuteeId: { required: true, type: 'number' }
+      slotId: { required: true, type: 'number' }
     }
   }),
+  authenticate,
   async (req, res, next) => {
     try {
-      const { slotId, tuteeId } = req.body;
-      const booking = await BookingModel.createAtomicBooking({ slotId, tuteeId });
+      const { slotId } = req.body;
+      const booking = await BookingModel.createAtomicBooking({ slotId, tuteeId: req.user.id });
 
       res.status(201).json({
         message: 'Slot successfully booked',

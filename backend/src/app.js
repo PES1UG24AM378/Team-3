@@ -6,6 +6,7 @@ const { errorHandler, AppError } = require('./middleware/error');
 const healthRoutes = require('./routes/health.routes');
 const slotRoutes = require('./routes/slot.routes');
 const bookingRoutes = require('./routes/booking.routes');
+const authRoutes = require('./routes/auth.routes');
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.get('/health', (req, res) => res.redirect('/api/health'));
 
 // Mount API Routes
 app.use(`${config.apiPrefix}/health`, healthRoutes);
+app.use(`${config.apiPrefix}/auth/login`, authRoutes);
 app.use(`${config.apiPrefix}/slots`, slotRoutes);
 app.use(`${config.apiPrefix}/bookings`, bookingRoutes);
 
