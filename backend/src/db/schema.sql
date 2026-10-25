@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS ratings (
 CREATE TABLE IF NOT EXISTS reminder_jobs (
     id SERIAL PRIMARY KEY,
     booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
-    reminder_type VARCHAR(20) NOT NULL CHECK (reminder_type IN ('24h', '1h')),
+       reminder_type VARCHAR(20) NOT NULL CHECK (reminder_type IN ('confirmation', '24h', '1h')),
     scheduled_for TIMESTAMP WITH TIME ZONE NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed', 'cancelled')),
     retry_count INTEGER NOT NULL DEFAULT 0,
