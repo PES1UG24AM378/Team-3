@@ -76,9 +76,35 @@ const BookingModel = {
          RETURNING *`,
         [slotId, slot.tutor_id, tuteeId]
       );
+      const newBooking = bookingRes.rows[0];
+
+      // 4. Schedule reminder jobs (24h and 1h before start time if in future)
+      if (slot.start_time) {
+        const startTime = new Date(slot.start_time);
+        const time24h = new Date(startTime.getTime() - 24 * 60 * 60 * 1000);
+        const time1h = new Date(startTime.getTime() - 60 * 60 * 1000);
+
+        if (time24h.getTime() > Date.now()) {
+          await client.query(
+            `INSERT INTO reminder_jobs (booking_id, reminder_type, scheduled_for, status)
+             VALUES ($1, '24h', $2, 'pending')
+             ON CONFLICT (booking_id, reminder_type) DO NOTHING`,
+            [newBooking.id, time24h.toISOString()]
+          );
+        }
+
+        if (time1h.getTime() > Date.now()) {
+          await client.query(
+            `INSERT INTO reminder_jobs (booking_id, reminder_type, scheduled_for, status)
+             VALUES ($1, '1h', $2, 'pending')
+             ON CONFLICT (booking_id, reminder_type) DO NOTHING`,
+            [newBooking.id, time1h.toISOString()]
+          );
+        }
+      }
 
       await client.query('COMMIT');
-      return bookingRes.rows[0];
+      return newBooking;
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;

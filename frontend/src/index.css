@@ -387,6 +387,24 @@ code, pre {
   width: auto;
 }
 
+/* Accessibility & Keyboard Navigation (WCAG 2.1 AA - TUT-NF-005) */
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 3px;
+}
+
+/* Responsive UI Breakpoints from 360px to 1920px (TUT-NF-004) */
+@media (min-width: 1440px) {
+  .container {
+    max-width: 1400px;
+    padding: 3.5rem 2.5rem;
+  }
+
+  .title-gradient {
+    font-size: 3.25rem;
+  }
+}
+
 @media (max-width: 800px) {
   .search-form {
     grid-template-columns: repeat(2, 1fr);
@@ -398,6 +416,14 @@ code, pre {
 }
 
 @media (max-width: 520px) {
+  .container {
+    padding: 1.5rem 1rem;
+  }
+
+  .title-gradient {
+    font-size: 2rem;
+  }
+
   .search-form {
     grid-template-columns: 1fr;
   }
@@ -409,6 +435,45 @@ code, pre {
   .booking-controls {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .calendar-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 380px) {
+  /* Extra-small mobile viewport (down to 360px) */
+  .container {
+    padding: 1rem 0.75rem;
+  }
+
+  .title-gradient {
+    font-size: 1.65rem;
+  }
+
+  .subtitle {
+    font-size: 0.95rem;
+  }
+
+  .tab-navigation {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .tab-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .booking-item-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .booking-actions {
+    width: 100%;
+    justify-content: flex-end;
   }
 }
 

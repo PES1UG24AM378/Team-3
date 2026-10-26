@@ -52,7 +52,7 @@ const AvailabilitySlotModel = {
       JOIN users u ON s.tutor_id = u.id
       LEFT JOIN tutor_profiles tp ON tp.user_id = u.id
       WHERE s.status = 'available'
-        AND s.start_time > CURRENT_TIMESTAMP
+        AND s.start_time > (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
     `;
     const params = [];
 

@@ -165,14 +165,22 @@ function App() {
         </p>
       </header>
 
-      <nav className="tab-navigation">
+      <nav className="tab-navigation" role="tablist" aria-label="Main Navigation">
         <button
+          role="tab"
+          aria-selected={activeTab === 'overview'}
+          aria-controls="slot-search"
+          id="tab-overview"
           className={`tab-btn ${activeTab === 'overview' ? 'active' : ''}`}
           onClick={() => setActiveTab('overview')}
         >
           🔍 Search & Book Slots
         </button>
         <button
+          role="tab"
+          aria-selected={activeTab === 'dashboard'}
+          aria-controls="my-bookings-dashboard"
+          id="tab-dashboard"
           className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
           onClick={() => setActiveTab('dashboard')}
         >
@@ -182,42 +190,99 @@ function App() {
 
       <main>
         {activeTab === 'overview' && (
-          <section className="glass-card search-card" id="slot-search">
+          <section className="glass-card search-card" id="slot-search" role="tabpanel" aria-labelledby="tab-overview">
             <div className="card-title">
-              <span>Find an available tutoring slot</span>
+              <h2>Find an available tutoring slot</h2>
               <span className="result-count">{slots.length} result{slots.length === 1 ? '' : 's'}</span>
             </div>
-            <form className="search-form" onSubmit={searchSlots}>
-              <label>Subject<input value={filters.subject} onChange={(e) => setFilters({ ...filters, subject: e.target.value })} placeholder="e.g. Mathematics" /></label>
-              <label>From<input type="date" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} /></label>
-              <label>To<input type="date" value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} /></label>
-              <label>Minimum tutor rating
-                <select value={filters.minRating} onChange={(e) => setFilters({ ...filters, minRating: e.target.value })}>
+            <form className="search-form" onSubmit={searchSlots} aria-label="Tutoring Slot Search Form">
+              <label htmlFor="filter-subject">
+                Subject
+                <input
+                  id="filter-subject"
+                  value={filters.subject}
+                  onChange={(e) => setFilters({ ...filters, subject: e.target.value })}
+                  placeholder="e.g. Mathematics"
+                />
+              </label>
+              <label htmlFor="filter-from">
+                From Date
+                <input
+                  id="filter-from"
+                  type="date"
+                  value={filters.from}
+                  onChange={(e) => setFilters({ ...filters, from: e.target.value })}
+                />
+              </label>
+              <label htmlFor="filter-to">
+                To Date
+                <input
+                  id="filter-to"
+                  type="date"
+                  value={filters.to}
+                  onChange={(e) => setFilters({ ...filters, to: e.target.value })}
+                />
+              </label>
+              <label htmlFor="filter-min-rating">
+                Minimum tutor rating
+                <select
+                  id="filter-min-rating"
+                  value={filters.minRating}
+                  onChange={(e) => setFilters({ ...filters, minRating: e.target.value })}
+                >
                   <option value="">Any rating</option>
                   {[4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating}+ stars</option>)}
                 </select>
               </label>
-              <button className="btn search-button" type="submit" disabled={searchLoading}>{searchLoading ? 'Searching...' : 'Search slots'}</button>
+              <button
+                className="btn search-button"
+                type="submit"
+                disabled={searchLoading}
+                aria-label="Search available slots"
+              >
+                {searchLoading ? 'Searching...' : 'Search slots'}
+              </button>
             </form>
             <div className="booking-controls">
-              <label>Authenticated booking token<input type="password" value={authToken} onChange={(e) => setAuthToken(e.target.value)} placeholder="Bearer token from /api/auth/login" /></label>
-              {bookingMessage && <p className={bookingMessage.type === 'error' ? 'message error-message' : 'message success-message'}>{bookingMessage.text}</p>}
+              <label htmlFor="booking-token-input">
+                Authenticated booking token
+                <input
+                  id="booking-token-input"
+                  type="password"
+                  value={authToken}
+                  onChange={(e) => setAuthToken(e.target.value)}
+                  placeholder="Bearer token from /api/auth/login"
+                />
+              </label>
+              {bookingMessage && (
+                <p
+                  role="alert"
+                  className={bookingMessage.type === 'error' ? 'message error-message' : 'message success-message'}
+                >
+                  {bookingMessage.text}
+                </p>
+              )}
             </div>
-            {searchError && <p className="message error-message">{searchError}</p>}
+            {searchError && <p role="alert" className="message error-message">{searchError}</p>}
             {!searchLoading && !searchError && slots.length === 0 && <p className="empty-state">No future, unbooked slots match these filters.</p>}
             <div className="calendar-grid">
               {Object.entries(slotsByDate).map(([date, dateSlots]) => (
                 <div className="calendar-day" key={date}>
                   <h3>{date}</h3>
                   {dateSlots.map((slot) => (
-                    <article className="slot-card" key={slot.id}>
+                    <article className="slot-card" key={slot.id} aria-label={`${slot.subject} slot by ${slot.tutor_name}`}>
                       <div>
                         <strong>{new Date(slot.start_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</strong>
                         <span>{slot.duration_minutes} min · {slot.subject}</span>
                       </div>
                       <div className="slot-meta">
                         <span>{slot.tutor_name} · ★ {Number(slot.tutor_rating).toFixed(1)}</span>
-                        <button className="btn book-button" onClick={() => bookSlot(slot.id)} disabled={bookingSlotId === slot.id}>
+                        <button
+                          className="btn book-button"
+                          onClick={() => bookSlot(slot.id)}
+                          disabled={bookingSlotId === slot.id}
+                          aria-label={`Book slot for ${slot.subject} with ${slot.tutor_name}`}
+                        >
                           {bookingSlotId === slot.id ? 'Booking...' : 'Book'}
                         </button>
                       </div>
@@ -230,19 +295,21 @@ function App() {
         )}
 
         {activeTab === 'dashboard' && (
-          <section className="glass-card" id="my-bookings-dashboard">
+          <section className="glass-card" id="my-bookings-dashboard" role="tabpanel" aria-labelledby="tab-dashboard">
             <div className="card-title">
-              <span>My Bookings Dashboard (TUT-F-040)</span>
+              <h2>My Bookings Dashboard (TUT-F-040)</h2>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button
                   className={`btn-secondary ${bookingFilter === 'upcoming' ? 'active' : ''}`}
                   onClick={() => setBookingFilter('upcoming')}
+                  aria-pressed={bookingFilter === 'upcoming'}
                 >
                   Upcoming
                 </button>
                 <button
                   className={`btn-secondary ${bookingFilter === 'past' ? 'active' : ''}`}
                   onClick={() => setBookingFilter('past')}
+                  aria-pressed={bookingFilter === 'past'}
                 >
                   Past & Cancelled
                 </button>
@@ -250,9 +317,10 @@ function App() {
             </div>
 
             <div style={{ marginBottom: '1rem' }}>
-              <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              <label htmlFor="dashboard-token-input" style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                 Authenticated Token:
                 <input
+                  id="dashboard-token-input"
                   type="password"
                   value={authToken}
                   onChange={(e) => setAuthToken(e.target.value)}

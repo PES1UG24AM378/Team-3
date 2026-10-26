@@ -203,6 +203,28 @@ deployments must set a strong `JWT_SECRET`.
 
 ---
 
+## ⚡ Non-Functional Requirements & Performance Testing (Issue #8)
+
+Full NFR verification results and evidence are documented in [NFR_VALIDATION_REPORT.md](file:///d:/Team-3-main/NFR_VALIDATION_REPORT.md).
+
+- **Search & Booking Latency (TUT-NF-001)**:
+  ```bash
+  npm run test:benchmark --prefix backend
+  ```
+  Validates 200 concurrent search requests and 100 concurrent booking requests with p95 latency $\le 2000$ms.
+
+- **Database Backup & Disaster Recovery (TUT-NF-006)**:
+  ```bash
+  npm run db:backup --prefix backend
+  ```
+  Validates automated daily backup configuration (max 24h RPO) and restore checks.
+
+- **Responsive & Accessible UI (TUT-NF-004 & TUT-NF-005)**:
+  Validated across mobile (360px) to desktop (1920px) with WCAG 2.1 AA keyboard navigation, contrast, and ARIA landmarks.
+
+- **Uptime Target (TUT-NF-002)**:
+  Documented operational requirement: 99.5% monthly uptime requires production synthetic monitoring (e.g., Prometheus / UptimeRobot against `/api/health`) and cannot be statistically validated by a local demo.
+
 ## 👥 Feature Branching & Handoff Guidelines
 
 1. **Pull Latest Main**:
