@@ -78,11 +78,19 @@ const BookingModel = {
       );
       const newBooking = bookingRes.rows[0];
 
-      // 4. Schedule reminder jobs (24h and 1h before start time if in future)
+      // 4. Schedule confirmation + reminder jobs (TUT-F-025, TUT-F-030, TUT-F-031)
       if (slot.start_time) {
         const startTime = new Date(slot.start_time);
         const time24h = new Date(startTime.getTime() - 24 * 60 * 60 * 1000);
         const time1h = new Date(startTime.getTime() - 60 * 60 * 1000);
+
+        // Confirmation job (due immediately)
+        await client.query(
+          `INSERT INTO reminder_jobs (booking_id, reminder_type, scheduled_for, status)
+           VALUES ($1, 'confirmation', (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'), 'pending')
+           ON CONFLICT (booking_id, reminder_type) DO NOTHING`,
+          [newBooking.id]
+        );
 
         if (time24h.getTime() > Date.now()) {
           await client.query(

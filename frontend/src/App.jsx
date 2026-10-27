@@ -11,8 +11,47 @@ function App() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState(null);
   const [authToken, setAuthToken] = useState('');
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loginEmail, setLoginEmail] = useState('bob.tutee@university.edu');
+  const [loginPassword, setLoginPassword] = useState('bob-password');
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginMessage, setLoginMessage] = useState(null);
+  const [profileData, setProfileData] = useState(null);
   const [bookingSlotId, setBookingSlotId] = useState(null);
   const [bookingMessage, setBookingMessage] = useState(null);
+  const [showLoginForm, setShowLoginForm] = useState(false);
+
+  const handleLogin = async (e) => {
+    e?.preventDefault();
+    setLoginLoading(true);
+    setLoginMessage(null);
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: loginEmail, password: loginPassword })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error?.message || 'Login failed');
+      setAuthToken(payload.data.token);
+      setCurrentUser(payload.data.user);
+      setLoginMessage({ type: 'success', text: `Welcome, ${payload.data.user.name}!` });
+      setShowLoginForm(false);
+    } catch (err) {
+      setLoginMessage({ type: 'error', text: err.message });
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    setAuthToken('');
+    setCurrentUser(null);
+    setLoginMessage(null);
+    setBookings([]);
+    setBookingMessage(null);
+    setActionMessage(null);
+  };
 
   const fetchHealth = async () => {
     setLoading(true);
@@ -155,13 +194,72 @@ function App() {
   return (
     <div className="container">
       <header className="hero-header">
-        <div className="badge">
-          <span>🚀</span> Team 3 • Shared Foundation (Issue #1 & #6)
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div className="badge">
+            <span>🚀</span> Team 3 • Peer-to-Peer Tutoring Scheduler
+          </div>
+          {/* Auth status in top-right */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            {currentUser ? (
+              <>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                  Signed in as <strong style={{ color: 'white' }}>{currentUser.name}</strong>
+                  <span style={{ marginLeft: '0.4rem', padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.7rem', background: currentUser.role === 'tutor' ? 'rgba(99,102,241,0.25)' : 'rgba(16,185,129,0.2)', color: currentUser.role === 'tutor' ? '#a5b4fc' : '#6ee7b7' }}>{currentUser.role}</span>
+                </span>
+                <button className="btn-secondary" onClick={handleLogout} style={{ padding: '0.35rem 0.9rem', fontSize: '0.82rem' }}>Sign out</button>
+              </>
+            ) : (
+              <button className="btn" onClick={() => setShowLoginForm(v => !v)} style={{ padding: '0.4rem 1.1rem', fontSize: '0.85rem' }}>
+                {showLoginForm ? 'Cancel' : '🔑 Sign in'}
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Inline login form — shown when not signed in and button clicked */}
+        {showLoginForm && !currentUser && (
+          <form onSubmit={handleLogin} style={{ marginTop: '1.25rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '1.25rem', display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'flex-end' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', flex: '1 1 220px' }}>
+              <label htmlFor="login-email" style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>University email</label>
+              <input
+                id="login-email"
+                type="email"
+                value={loginEmail}
+                onChange={e => setLoginEmail(e.target.value)}
+                placeholder="you@university.edu"
+                required
+                style={{ padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(0,0,0,0.3)', color: 'white', fontSize: '0.9rem' }}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', flex: '1 1 180px' }}>
+              <label htmlFor="login-password" style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Password</label>
+              <input
+                id="login-password"
+                type="password"
+                value={loginPassword}
+                onChange={e => setLoginPassword(e.target.value)}
+                placeholder="Password"
+                required
+                style={{ padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(0,0,0,0.3)', color: 'white', fontSize: '0.9rem' }}
+              />
+            </div>
+            <button type="submit" className="btn" disabled={loginLoading} style={{ padding: '0.5rem 1.4rem', alignSelf: 'flex-end' }}>
+              {loginLoading ? 'Signing in…' : 'Sign in'}
+            </button>
+            {loginMessage && (
+              <p style={{ width: '100%', margin: 0, fontSize: '0.85rem', color: loginMessage.type === 'error' ? '#f87171' : '#6ee7b7' }}>
+                {loginMessage.text}
+              </p>
+            )}
+            <p style={{ width: '100%', margin: 0, fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+              Demo accounts — Tutee: <code>bob.tutee@university.edu / bob-password</code> &nbsp;|&nbsp; Tutors: <code>alice.tutor@university.edu</code>, <code>david.chen@university.edu</code>, <code>elena.gomez@university.edu</code>, <code>marcus.vance@university.edu</code> (passwords: <code>&lt;firstname&gt;-password</code>)
+            </p>
+          </form>
+        )}
+
         <h1 className="title-gradient">Peer-to-Peer Tutoring Scheduler</h1>
         <p className="subtitle">
-          Small, runnable shared foundation with Express REST API, PostgreSQL schema,
-          UTC timezone enforcement, and responsive React frontend.
+          Find tutors, book sessions, and manage your schedule — all in one place.
         </p>
       </header>
 
@@ -198,12 +296,44 @@ function App() {
             <form className="search-form" onSubmit={searchSlots} aria-label="Tutoring Slot Search Form">
               <label htmlFor="filter-subject">
                 Subject
-                <input
+                <select
                   id="filter-subject"
                   value={filters.subject}
                   onChange={(e) => setFilters({ ...filters, subject: e.target.value })}
-                  placeholder="e.g. Mathematics"
-                />
+                >
+                  <option value="">All subjects</option>
+                  <optgroup label="Computer Science">
+                    <option value="Algorithms">Algorithms</option>
+                    <option value="Algorithms & Complexity">Algorithms &amp; Complexity</option>
+                    <option value="Computer Science">Computer Science</option>
+                    <option value="Data Structures">Data Structures</option>
+                    <option value="Operating Systems">Operating Systems</option>
+                    <option value="Database Systems">Database Systems</option>
+                    <option value="Computer Networks">Computer Networks</option>
+                    <option value="Software Engineering">Software Engineering</option>
+                    <option value="Machine Learning">Machine Learning</option>
+                    <option value="Artificial Intelligence">Artificial Intelligence</option>
+                    <option value="Web Development">Web Development</option>
+                  </optgroup>
+                  <optgroup label="Mathematics">
+                    <option value="Mathematics">Mathematics</option>
+                    <option value="Discrete Mathematics">Discrete Mathematics</option>
+                    <option value="Linear Algebra">Linear Algebra</option>
+                    <option value="Calculus">Calculus</option>
+                    <option value="Statistics">Statistics</option>
+                    <option value="Probability">Probability</option>
+                  </optgroup>
+                  <optgroup label="Sciences">
+                    <option value="Physics">Physics</option>
+                    <option value="Chemistry">Chemistry</option>
+                    <option value="Biology">Biology</option>
+                  </optgroup>
+                  <optgroup label="Other">
+                    <option value="Economics">Economics</option>
+                    <option value="English">English</option>
+                    <option value="History">History</option>
+                  </optgroup>
+                </select>
               </label>
               <label htmlFor="filter-from">
                 From Date
@@ -244,16 +374,19 @@ function App() {
               </button>
             </form>
             <div className="booking-controls">
-              <label htmlFor="booking-token-input">
-                Authenticated booking token
-                <input
-                  id="booking-token-input"
-                  type="password"
-                  value={authToken}
-                  onChange={(e) => setAuthToken(e.target.value)}
-                  placeholder="Bearer token from /api/auth/login"
-                />
-              </label>
+              {!currentUser ? (
+                <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', margin: 0 }}>
+                  👆 <button
+                    className="btn-secondary"
+                    onClick={() => { setShowLoginForm(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                    style={{ padding: '0.3rem 0.8rem', fontSize: '0.82rem' }}
+                  >Sign in</button> to book a session.
+                </p>
+              ) : (
+                <p style={{ fontSize: '0.88rem', color: '#6ee7b7', margin: 0 }}>
+                  ✅ Signed in as <strong>{currentUser.name}</strong> — click <em>Book</em> on any slot below.
+                </p>
+              )}
               {bookingMessage && (
                 <p
                   role="alert"
@@ -316,21 +449,25 @@ function App() {
               </div>
             </div>
 
-            <div style={{ marginBottom: '1rem' }}>
-              <label htmlFor="dashboard-token-input" style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                Authenticated Token:
-                <input
-                  id="dashboard-token-input"
-                  type="password"
-                  value={authToken}
-                  onChange={(e) => setAuthToken(e.target.value)}
-                  placeholder="Bearer token to load your bookings"
-                  style={{ marginLeft: '0.5rem', padding: '0.4rem', borderRadius: '4px', border: '1px solid var(--border-subtle)', background: 'rgba(0,0,0,0.2)', color: 'white' }}
-                />
-              </label>
-              <button className="btn" style={{ marginLeft: '0.5rem', padding: '0.4rem 0.8rem' }} onClick={fetchBookings}>
-                Refresh Bookings
-              </button>
+            <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              {currentUser ? (
+                <span style={{ fontSize: '0.88rem', color: '#6ee7b7' }}>
+                  ✅ Viewing bookings for <strong>{currentUser.name}</strong>
+                </span>
+              ) : (
+                <span style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => { setShowLoginForm(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                    style={{ padding: '0.3rem 0.8rem', fontSize: '0.82rem' }}
+                  >Sign in</button> to view your bookings.
+                </span>
+              )}
+              {currentUser && (
+                <button className="btn" style={{ padding: '0.4rem 0.8rem' }} onClick={fetchBookings}>
+                  ↻ Refresh
+                </button>
+              )}
             </div>
 
             {actionMessage && (
@@ -339,17 +476,17 @@ function App() {
               </p>
             )}
 
-            {!authToken && (
-              <p className="empty-state">Please enter an authentication bearer token above to view your bookings.</p>
+            {!currentUser && (
+              <p className="empty-state">Sign in using the button at the top to view your bookings.</p>
             )}
 
-            {authToken && bookingsLoading && <p>Loading your bookings...</p>}
+            {currentUser && bookingsLoading && <p>Loading your bookings...</p>}
 
-            {authToken && !bookingsLoading && bookings.length === 0 && (
+            {currentUser && !bookingsLoading && bookings.length === 0 && (
               <p className="empty-state">No {bookingFilter} bookings found for your account.</p>
             )}
 
-            {authToken && !bookingsLoading && bookings.length > 0 && (
+            {currentUser && !bookingsLoading && bookings.length > 0 && (
               <div className="bookings-list">
                 {bookings.map((b) => (
                   <div className="booking-item-card" key={b.id}>
@@ -467,39 +604,7 @@ function App() {
           </div>
         </section>
 
-        {/* Conventions & Team Info */}
-        <section className="glass-card" style={{ marginBottom: '2rem' }}>
-          <div className="card-title">
-            <span>Team 3 Conventions & Architecture</span>
-          </div>
 
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '1.25rem' }}>
-            All 4 members can build their assigned issues (#2 to #12) in parallel on top of this foundation.
-          </p>
-
-          <div className="team-grid">
-            <div className="team-card team-lead">
-              <strong>Mohammed Shahid Javed Mokashi</strong>
-              <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>PES1UG24AM378</div>
-              <div style={{ color: '#818cf8', marginTop: '0.3rem', fontSize: '0.8rem' }}>Issue #1 Foundation Lead & Integration</div>
-            </div>
-            <div className="team-card">
-              <strong>Team Member 2</strong>
-              <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>Assigned Issues</div>
-              <div style={{ color: 'var(--text-muted)', marginTop: '0.3rem', fontSize: '0.8rem' }}>Auth, Users & Profiles</div>
-            </div>
-            <div className="team-card">
-              <strong>Team Member 3</strong>
-              <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>Assigned Issues</div>
-              <div style={{ color: 'var(--text-muted)', marginTop: '0.3rem', fontSize: '0.8rem' }}>Availability & Recurring Slots</div>
-            </div>
-            <div className="team-card">
-              <strong>Team Member 4</strong>
-              <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>Assigned Issues</div>
-              <div style={{ color: 'var(--text-muted)', marginTop: '0.3rem', fontSize: '0.8rem' }}>Bookings, Ratings & Notifications</div>
-            </div>
-          </div>
-        </section>
       </main>
     </div>
   );

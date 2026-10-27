@@ -42,4 +42,4 @@ async function authenticate(req, res, next) {
   }
 }
 
-module.exports = { authenticate, signToken };
+module.exports = { authenticate, signToken, verifyToken };

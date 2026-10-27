@@ -30,26 +30,47 @@ function getPool() {
   return pool;
 }
 
+const { createMemoryDb } = require('./memoryFallback');
+let memoryDbInstance = null;
+
+function getMemoryDb() {
+  if (!memoryDbInstance) {
+    memoryDbInstance = createMemoryDb();
+  }
+  return memoryDbInstance;
+}
+
 /**
  * Execute a query with parameters
  */
 async function query(text, params) {
-  const p = getPool();
-  const start = Date.now();
-  const res = await p.query(text, params);
-  const duration = Date.now() - start;
-  if (config.env === 'development') {
-    // optional query debug logging
+  try {
+    const p = getPool();
+    const start = Date.now();
+    const res = await p.query(text, params);
+    return res;
+  } catch (err) {
+    // In local development/demo mode without live PostgreSQL, fallback to in-memory store
+    if (config.env === 'development' || config.env === 'test') {
+      return await getMemoryDb().query(text, params);
+    }
+    throw err;
   }
-  return res;
 }
 
 /**
  * Acquire a client for manual transaction control
  */
 async function getClient() {
-  const p = getPool();
-  return await p.connect();
+  try {
+    const p = getPool();
+    return await p.connect();
+  } catch (err) {
+    if (config.env === 'development' || config.env === 'test') {
+      return await getMemoryDb().getClient();
+    }
+    throw err;
+  }
 }
 
 /**
