@@ -387,6 +387,89 @@ code, pre {
   width: auto;
 }
 
+.sessions-card {
+  margin-bottom: 2rem;
+}
+
+.sessions-list {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.session-card {
+  background: rgba(0, 0, 0, 0.16);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+}
+
+.session-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.session-heading strong,
+.session-heading span {
+  display: block;
+}
+
+.session-heading > div > span {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  margin-top: 0.2rem;
+}
+
+.session-status {
+  background: rgba(99, 102, 241, 0.14);
+  border-radius: var(--radius-full);
+  color: #c7d2fe;
+  font-size: 0.72rem;
+  padding: 0.25rem 0.65rem;
+  text-transform: capitalize;
+}
+
+.rating-form {
+  align-items: end;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 8rem minmax(12rem, 1fr) auto;
+  margin-top: 1rem;
+}
+
+.rating-form label {
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  font-size: 0.78rem;
+  gap: 0.35rem;
+}
+
+.rating-form select,
+.rating-form textarea {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  font: inherit;
+  min-height: 2.5rem;
+  padding: 0.55rem 0.65rem;
+}
+
+.rating-form textarea {
+  min-height: 2.5rem;
+  resize: vertical;
+}
+
+.submitted-rating {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-top: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 800px) {
   .search-form {
     grid-template-columns: repeat(2, 1fr);
@@ -408,6 +491,14 @@ code, pre {
 
   .booking-controls {
     align-items: stretch;
+    flex-direction: column;
+  }
+
+  .rating-form {
+    grid-template-columns: 1fr;
+  }
+
+  .session-heading {
     flex-direction: column;
   }
 }
