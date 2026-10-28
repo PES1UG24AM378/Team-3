@@ -13,6 +13,10 @@ function App() {
   const [authToken, setAuthToken] = useState('');
   const [bookingSlotId, setBookingSlotId] = useState(null);
   const [bookingMessage, setBookingMessage] = useState(null);
+  const [myBookings, setMyBookings] = useState([]);
+  const [myBookingsLoading, setMyBookingsLoading] = useState(false);
+  const [sessionMessage, setSessionMessage] = useState(null);
+  const [ratingDrafts, setRatingDrafts] = useState({});
 
   const fetchHealth = async () => {
     setLoading(true);
@@ -82,7 +86,6 @@ function App() {
     try {
       const response = await fetch('/api/bookings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
         body: JSON.stringify({ slotId })
       });
@@ -90,11 +93,55 @@ function App() {
       if (!response.ok) throw new Error(payload.error?.message || 'Unable to book this slot');
       setBookingMessage({ type: 'success', text: 'Slot booked successfully.' });
       await searchSlots();
+      await loadMyBookings();
     } catch (err) {
       setBookingMessage({ type: 'error', text: err.message });
       await searchSlots();
     } finally {
       setBookingSlotId(null);
+    }
+  };
+
+  const loadMyBookings = async () => {
+    if (!authToken) {
+      setSessionMessage({ type: 'error', text: 'Enter your bearer token above to view your sessions.' });
+      return;
+    }
+    setMyBookingsLoading(true);
+    setSessionMessage(null);
+    try {
+      const response = await fetch('/api/bookings/mine', {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error?.message || 'Unable to load sessions');
+      setMyBookings(payload.data || []);
+    } catch (err) {
+      setSessionMessage({ type: 'error', text: err.message });
+    } finally {
+      setMyBookingsLoading(false);
+    }
+  };
+
+  const updateSession = async (booking, action) => {
+    setSessionMessage(null);
+    try {
+      const isRating = action === 'rating';
+      const draft = ratingDrafts[booking.id] || { rating: '5', comment: '' };
+      const response = await fetch(isRating ? `/api/bookings/${booking.id}/rating` : `/api/bookings/${booking.id}/complete`, {
+        method: isRating ? 'POST' : 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`
+        },
+        ...(isRating ? { body: JSON.stringify({ rating: Number(draft.rating), comment: draft.comment }) } : {})
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error?.message || 'Unable to update session');
+      setSessionMessage({ type: 'success', text: isRating ? 'Thanks for your feedback.' : 'Session marked completed.' });
+      await loadMyBookings();
+    } catch (err) {
+      setSessionMessage({ type: 'error', text: err.message });
     }
   };
 
@@ -133,7 +180,8 @@ function App() {
             <button className="btn search-button" type="submit" disabled={searchLoading}>{searchLoading ? 'Searching...' : 'Search slots'}</button>
           </form>
           <div className="booking-controls">
-            <label>Authenticated booking token<input type="password" value={authToken} onChange={(e) => setAuthToken(e.target.value)} placeholder="Bearer token from /api/auth/login" /></label>
+            <label>Authenticated session token<input type="password" value={authToken} onChange={(e) => setAuthToken(e.target.value)} placeholder="Bearer token from /api/auth/login" /></label>
+            <button className="btn book-button" onClick={loadMyBookings} disabled={myBookingsLoading}>{myBookingsLoading ? 'Loading…' : 'Load my sessions'}</button>
             {bookingMessage && <p className={bookingMessage.type === 'error' ? 'message error-message' : 'message success-message'}>{bookingMessage.text}</p>}
           </div>
           {searchError && <p className="message error-message">{searchError}</p>}
@@ -158,6 +206,49 @@ function App() {
                 ))}
               </div>
             ))}
+          </div>
+        </section>
+
+        <section className="glass-card sessions-card">
+          <div className="card-title">
+            <span>My sessions</span>
+            <span className="result-count">{myBookings.length} session{myBookings.length === 1 ? '' : 's'}</span>
+          </div>
+          {sessionMessage && <p className={`message ${sessionMessage.type === 'error' ? 'error-message' : 'success-message'}`}>{sessionMessage.text}</p>}
+          {!myBookings.length && <p className="empty-state">Load your sessions with the bearer token above.</p>}
+          <div className="sessions-list">
+            {myBookings.map((booking) => {
+              const draft = ratingDrafts[booking.id] || { rating: '5', comment: '' };
+              return (
+                <article className="session-card" key={booking.id}>
+                  <div className="session-heading">
+                    <div>
+                      <strong>{booking.subject}</strong>
+                      <span>{booking.viewer_role === 'tutor' ? `Tutee: ${booking.tutee_name}` : `Tutor: ${booking.tutor_name}`}</span>
+                      <span>{new Date(booking.start_time).toLocaleString()} · {booking.duration_minutes} min</span>
+                    </div>
+                    <span className={`session-status status-${booking.status}`}>{booking.status}</span>
+                  </div>
+                  {booking.viewer_role === 'tutor' && booking.status === 'confirmed' && (
+                    <button className="btn book-button" onClick={() => updateSession(booking, 'complete')}>Mark session completed</button>
+                  )}
+                  {booking.viewer_role === 'tutee' && booking.status === 'completed' && booking.my_rating == null && (
+                    <div className="rating-form">
+                      <label>Rating
+                        <select value={draft.rating} onChange={(e) => setRatingDrafts({ ...ratingDrafts, [booking.id]: { ...draft, rating: e.target.value } })}>
+                          {[5, 4, 3, 2, 1].map((value) => <option key={value} value={value}>{value} star{value === 1 ? '' : 's'}</option>)}
+                        </select>
+                      </label>
+                      <label className="comment-field">Comment (optional)
+                        <textarea maxLength={2000} value={draft.comment} onChange={(e) => setRatingDrafts({ ...ratingDrafts, [booking.id]: { ...draft, comment: e.target.value } })} placeholder="Share feedback about this session" />
+                      </label>
+                      <button className="btn book-button" onClick={() => updateSession(booking, 'rating')}>Submit rating</button>
+                    </div>
+                  )}
+                  {booking.viewer_role === 'tutee' && booking.my_rating != null && <p className="submitted-rating">Your rating: {'★'.repeat(booking.my_rating)}{'☆'.repeat(5 - booking.my_rating)}{booking.my_rating_comment ? ` · ${booking.my_rating_comment}` : ''}</p>}
+                </article>
+              );
+            })}
           </div>
         </section>
 

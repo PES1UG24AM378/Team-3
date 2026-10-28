@@ -90,11 +90,14 @@ const BookingModel = {
   async findByUserId(userId, role = null) {
     let queryText = `
       SELECT b.*, s.subject, s.start_time, s.end_time, s.duration_minutes,
-             tutor.name as tutor_name, tutee.name as tutee_name
+             tutor.name as tutor_name, tutee.name as tutee_name,
+             r.rating as my_rating, r.comment as my_rating_comment,
+             CASE WHEN b.tutor_id = $1 THEN 'tutor' ELSE 'tutee' END as viewer_role
       FROM bookings b
       JOIN availability_slots s ON b.slot_id = s.id
       JOIN users tutor ON b.tutor_id = tutor.id
       JOIN users tutee ON b.tutee_id = tutee.id
+      LEFT JOIN ratings r ON r.booking_id = b.id
     `;
     const params = [userId];
 
@@ -109,6 +112,64 @@ const BookingModel = {
     queryText += ' ORDER BY s.start_time DESC';
     const res = await db.query(queryText, params);
     return res.rows;
+  },
+
+  async completeByTutor(bookingId, tutorId) {
+    const client = await db.getClient();
+    try {
+      await client.query('BEGIN');
+      const result = await client.query(
+        `SELECT b.id, b.slot_id, b.tutor_id, b.status, s.end_time
+         FROM bookings b
+         JOIN availability_slots s ON s.id = b.slot_id
+         WHERE b.id = $1
+         FOR UPDATE OF b, s`,
+        [bookingId]
+      );
+      const booking = result.rows[0];
+      if (!booking) {
+        const err = new Error('Booking not found');
+        err.statusCode = 404;
+        err.code = 'BOOKING_NOT_FOUND';
+        throw err;
+      }
+      if (booking.tutor_id !== tutorId) {
+        const err = new Error('Only the tutor for this booking can mark it completed');
+        err.statusCode = 403;
+        err.code = 'FORBIDDEN';
+        throw err;
+      }
+      if (booking.status !== 'confirmed') {
+        const err = new Error(`Cannot complete a booking with status "${booking.status}"`);
+        err.statusCode = 409;
+        err.code = 'BOOKING_NOT_COMPLETABLE';
+        throw err;
+      }
+      if (new Date(booking.end_time).getTime() > Date.now()) {
+        const err = new Error('A session can only be completed after its scheduled end time');
+        err.statusCode = 409;
+        err.code = 'SESSION_NOT_ENDED';
+        throw err;
+      }
+
+      const updated = await client.query(
+        `UPDATE bookings SET status = 'completed', updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 RETURNING *`,
+        [bookingId]
+      );
+      await client.query(
+        `UPDATE availability_slots SET status = 'completed', updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [booking.slot_id]
+      );
+      await client.query('COMMIT');
+      return updated.rows[0];
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 };
 
