@@ -53,7 +53,7 @@ const ReminderJobModel = {
        JOIN availability_slots s ON b.slot_id = s.id
        JOIN users tutor ON b.tutor_id = tutor.id
        JOIN users tutee ON b.tutee_id = tutee.id
-       WHERE rj.status = 'pending' AND rj.scheduled_for <= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
+       WHERE rj.status = 'pending' AND rj.scheduled_for <= CURRENT_TIMESTAMP
        ORDER BY rj.scheduled_for ASC
        LIMIT $1`,
       [limit]
@@ -64,7 +64,7 @@ const ReminderJobModel = {
   async markSent(id) {
     await db.query(
       `UPDATE reminder_jobs
-       SET status = 'sent', sent_at = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
+       SET status = 'sent', sent_at = CURRENT_TIMESTAMP
        WHERE id = $1`,
       [id]
     );
