@@ -162,6 +162,9 @@ test('booking requires a slot ID', async () => {
 test('two authenticated users cannot book the same slot concurrently in PostgreSQL', {
   skip: !hasDatabaseUrl && 'Set DATABASE_URL or RUN_DB_INTEGRATION_TESTS=true to run this PostgreSQL integration test'
 }, async () => {
+  // Use a real PostgreSQL client for this integration test.
+  db.getClient = originals.getClient;
+
   const suffix = crypto.randomUUID();
   const emails = [`booking-tutor-${suffix}@test.invalid`, `booking-tutee-a-${suffix}@test.invalid`, `booking-tutee-b-${suffix}@test.invalid`];
   const userIds = [];
