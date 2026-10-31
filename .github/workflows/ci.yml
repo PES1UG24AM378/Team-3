@@ -48,8 +48,8 @@ jobs:
           test -f backend/.env.example
           test -f frontend/.env.example
 
-      - name: Run Backend Syntax and Linter Check
-        run: npm run lint --prefix backend
+      - name: Run Root Lint Checks
+        run: npm run lint
 
       - name: Run Database Migrations
         env:
@@ -71,5 +71,5 @@ jobs:
           DB_PASSWORD: postgres
         run: npm test --prefix backend
 
-      - name: Build Frontend Application
-        run: npm run build --prefix frontend
+      - name: Build Workspaces
+        run: npm run build

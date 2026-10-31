@@ -93,8 +93,7 @@ CLIENT_ORIGIN=http://localhost:5173
 ### 4. Install Dependencies
 Run from the root directory to install packages across both workspaces:
 ```bash
-npm install --prefix backend
-npm install --prefix frontend
+npm install
 ```
 
 ### 5. Setup PostgreSQL Database
@@ -133,15 +132,35 @@ npm run dev
 
 ## 🧪 Testing & CI
 
-Run tests and linting before submitting any PR:
+The backend suite contains the real regression tests and API coverage:
 ```bash
-# Run tests across workspaces
-npm test
+# From the project root
+# Run backend tests, including auth, profile, slot, booking, health, and rating coverage
+npm test --prefix backend
 
-# Run linting across workspaces
+# Run one backend test file from the project root
+cd backend && node --test test/auth.test.js
+```
+
+The booking concurrency integration test uses PostgreSQL. Configure `DATABASE_URL`
+or set `RUN_DB_INTEGRATION_TESTS=true` when using the `DB_*` settings, then run
+the migrations to include it. It is skipped by default unless a database URL is
+configured or the opt-in flag is set. CI provisions PostgreSQL, migrates the
+schema, and runs the complete backend suite.
+
+The root `npm test` command also invokes the frontend test script, which is
+currently only a placeholder message and does not run a frontend test suite.
+Use the backend command above when you want the actual regression tests.
+
+The root lint command invokes the workspace scripts; the backend currently prints
+a syntax-check message and the frontend lint script is a placeholder. The root
+build command invokes a backend message-based check and creates the real Vite
+production bundle for the frontend.
+
+Run these workspace checks before submitting a PR:
+```bash
 npm run lint
 
-# Build frontend production bundle
 npm run build
 ```
 
