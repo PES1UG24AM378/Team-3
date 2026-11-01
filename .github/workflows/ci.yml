@@ -10,7 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  checks:
+  test-and-lint:
+    name: test-and-lint
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -42,10 +43,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
