@@ -5,195 +5,182 @@
 > **Reference Documentation:** SRS v1.1, SAD v1.0, Test Plan v1.0  
 > **Repository:** [PES1UG24AM378/Team-3](https://github.com/PES1UG24AM378/Team-3)
 
----
+## Overview
 
-## 📌 Overview
+This repository contains the runnable shared foundation for Team 3's peer-to-peer tutoring scheduler. It is an npm workspaces monorepo with an Express API, a React/Vite web app, and PostgreSQL persistence. The database schema covers users, tutor profiles, availability slots, bookings, ratings, and reminder jobs. Booking reservations use a database transaction and row lock to prevent two requests from reserving the same slot.
 
-This repository provides the core, runnable shared foundation for Team 3's **Peer-to-Peer Tutoring Scheduler**. It establishes:
-1. **Frontend & Backend Architecture**: Monorepo structure using standard npm workspaces with Node.js/Express and React/Vite.
-2. **Database & Schema**: PostgreSQL connection pool and relational models for `users`, `tutor_profiles`, `availability_slots`, `bookings`, `ratings`, and `reminder_jobs`.
-3. **Timezone Policy**: Enforced **UTC** ISO 8601 storage (`TIMESTAMP WITH TIME ZONE`) across all timestamps and APIs.
-4. **Error Handling & Validation**: Unified JSON error envelope `{ error: { code, message, details, timestamp } }` and input validation middleware.
-5. **Conflict Resolution**: Transaction-based atomic row locks (`SELECT ... FOR UPDATE`) to prevent double-booking.
-6. **Safe Environment Variable Configuration**: Standardized `.env.example` templates ensuring no secrets or credentials are ever committed.
-7. **CI/CD Pipeline**: GitHub Actions workflow validating migrations, tests, and builds.
+The backend API is served under `/api`. Dates are stored and returned in UTC. Error responses use a common JSON envelope. Local environment templates are provided for development; never put real credentials or production secrets in those files or commit local `.env` files.
 
----
-
-## 📂 Repository Structure
+## Repository layout
 
 ```text
 Team-3/
-├── .github/
-│   └── workflows/
-│       └── ci.yml               # GitHub Actions CI pipeline
+├── .github/workflows/ci.yml          # CI workflow
 ├── backend/
-│   ├── src/
-│   │   ├── config/              # Environment variable loading & configuration
-│   │   ├── db/                  # PostgreSQL pool, schema.sql, migrate.js, seed.js
-│   │   ├── middleware/          # Unified error handler & request validation
-│   │   ├── models/              # User, TutorProfile, Slot, Booking, Rating DAO models
-│   │   ├── routes/              # Health, Slot, and Booking API route controllers
-│   │   ├── utils/               # Timezone (UTC) utilities
-│   │   ├── app.js               # Express application initialization
-│   │   └── server.js            # Server entrypoint
-│   ├── test/                    # Backend smoke & integration tests
-│   ├── .env.example             # Backend environment template
+│   ├── src/                           # Express API, PostgreSQL models, worker
+│   ├── test/                          # Backend API tests and PostgreSQL integration test
+│   ├── scripts/check-syntax.js        # Backend JavaScript syntax check
+│   ├── .env.example                   # Backend and reminder-worker settings
 │   └── package.json
 ├── frontend/
-│   ├── src/
-│   │   ├── App.jsx              # Main React dashboard & live health monitor
-│   │   ├── index.css            # Dark mode glassmorphism styles & design tokens
-│   │   └── main.jsx             # React entrypoint
-│   ├── index.html               # Frontend HTML root
-│   ├── vite.config.js           # Vite config with backend proxy (/api)
-│   ├── .env.example             # Frontend environment template
+│   ├── src/                           # React app
+│   ├── vite.config.js                 # Vite development server and API proxy
+│   ├── .env.example                   # Frontend environment template
 │   └── package.json
-├── .env.example                 # Root environment template
-├── .gitignore                   # Excludes node_modules, dist, .env secrets
-├── package.json                 # Monorepo workspaces & orchestration scripts
+├── scripts/validate-env-templates.js  # Environment-template validation
+├── docs/test-traceability-and-sprint-evidence.md
+├── .env.example                       # Root development defaults/reference
+├── package.json                       # npm workspaces and root commands
 └── README.md
 ```
 
----
+The root package has two workspaces: `backend` and `frontend`. Install and run commands from the repository root unless stated otherwise. The lockfile is shared by both workspaces.
 
-## 🚀 Quickstart Guide for Team Members
+## Prerequisites
 
-### 1. Prerequisites
-Ensure you have the following installed on your machine:
-- **Node.js** (v18.0.0 or higher, v20+ recommended)
-- **npm** (v9+ recommended)
-- **PostgreSQL** (v14+ recommended)
-- **Git**
+- Node.js **22.12 or newer** and npm **10 or newer**. CI uses Node.js 22. The locked Vite version requires Node.js 20.19+ or 22.12+; Node 22 is the documented project baseline.
+- PostgreSQL **14 or newer**, running locally for development and integration tests. The `createdb` and `psql` client tools are used by the setup and verification commands. CI uses PostgreSQL 15.
+- Git.
+- Docker is optional; it can be used to run PostgreSQL locally, but the application does not require Docker.
 
-### 2. Clone the Repository
+## Clone and install
+
 ```bash
 git clone https://github.com/PES1UG24AM378/Team-3.git
 cd Team-3
+npm ci
 ```
 
-### 3. Configure Environment Variables
-Copy `.env.example` to create your local `.env`:
+`npm ci` installs both workspaces from the committed `package-lock.json` without changing the lockfile. To run a command in one workspace from the root, use `npm run <script> --workspace=backend` or `npm run <script> --workspace=frontend`. Root scripts are provided for the common checks and database commands.
+
+## Environment configuration
+
+There are three templates with different roles:
+
+- `.env.example` contains shared development defaults and can be copied to a root `.env` when starting backend files directly from the repository root. The backend configuration also explicitly loads `backend/.env`; values already set in the process environment take precedence.
+- `backend/.env.example` contains the backend's database, API, JWT, and optional mail/reminder settings. Copy this to `backend/.env` for the recommended npm workspace commands:
+  ```bash
+  cp backend/.env.example backend/.env
+  ```
+- `frontend/.env.example` is read by Vite. Copy it to `frontend/.env` if you want a local frontend environment file:
+  ```bash
+  cp frontend/.env.example frontend/.env
+  ```
+  It currently declares `VITE_API_BASE_URL=/api`, but the React code uses `/api` directly, so changing this variable has no effect yet. Vite's development proxy forwards `/api` to `http://localhost:5000`.
+
+The templates contain local development values only. Review and adjust `backend/.env` for your local PostgreSQL installation. Do not commit `.env`, tokens, passwords, private keys, or production credentials. Add production secrets through the deployment platform's secret manager.
+
+| Variable | Required? | Purpose and development behavior |
+| --- | --- | --- |
+| `DATABASE_URL` | Optional; when set, it takes precedence over `DB_*`. | PostgreSQL connection URL. The examples point to a local `tutoring_scheduler` database. |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Optional alternative to `DATABASE_URL`. | Individual PostgreSQL connection fields. If omitted, defaults are `localhost`, `5432`, `tutoring_scheduler`, `postgres`, and `postgres`. |
+| `DB_SSL` | Optional | Set to `true` to enable SSL; the local default is `false`. |
+| `JWT_SECRET` | Optional for local development; required for production. | Signs and verifies JWTs. Development has an example-only default. Production must set a strong private value; the backend rejects its built-in insecure default in production. |
+| `PORT`, `API_PREFIX`, `NODE_ENV`, `CLIENT_ORIGIN` | Optional | Backend defaults are port `5000`, prefix `/api`, development mode, and frontend origin `http://localhost:5173`. |
+| `JWT_EXPIRES_IN`, `MIN_CANCELLATION_NOTICE_HOURS`, `TIMEZONE` | Optional | Defaults are `7d`, `2`, and `UTC`. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Optional | Configure an SMTP server for actual email delivery. Credentials are needed only if the SMTP service requires them. Without `SMTP_HOST`, the development mailer logs messages instead of sending them. |
+| `REMINDER_POLL_INTERVAL_MS`, `REMINDER_RETRY_BASE_MINUTES`, `REMINDER_MAX_RETRIES` | Optional | Reminder worker poll interval and retry settings. Defaults are 15000 ms, 1 minute, and 3 attempts. These settings belong in `backend/.env`. |
+| `VITE_API_BASE_URL` | Not currently consumed by the frontend. | The template value is `/api`; the current app uses `/api` directly. |
+
+## Database setup
+
+Start PostgreSQL, then create the development database. With the default local PostgreSQL role:
+
 ```bash
-cp .env.example .env
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
-```
-*(On Windows PowerShell, use `copy .env.example .env`)*
-
-Open `backend/.env` and verify your PostgreSQL credentials:
-```env
-PORT=5000
-NODE_ENV=development
-API_PREFIX=/api
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/tutoring_scheduler
-CLIENT_ORIGIN=http://localhost:5173
+createdb -U postgres tutoring_scheduler
 ```
 
-### 4. Install Dependencies
-Run from the root directory to install packages across both workspaces:
-```bash
-npm install
-```
+If your PostgreSQL user, password, host, or database differs, update `DATABASE_URL` or the `DB_*` variables in `backend/.env`. When both connection forms are present, `DATABASE_URL` wins.
 
-### 5. Setup PostgreSQL Database
-Make sure PostgreSQL is running locally and create the database:
-```sql
-CREATE DATABASE tutoring_scheduler;
-```
+From the repository root, create the schema and optionally add development seed data:
 
-Run the schema migration and sample seed data:
 ```bash
 npm run db:migrate
 npm run db:seed
 ```
 
-### 6. Run the Development Servers
-You can run both backend and frontend together or in separate terminals:
+The migration runs `backend/src/db/schema.sql` and can be run again safely. The seed command creates development users, a tutor profile, and a sample slot; run it once for a clean development database because each run can add another sample slot. Seed account passwords are local-development-only and are listed in the API section below.
 
-**Option A: Separate Terminals (Recommended)**
-- **Terminal 1 (Backend):**
-  ```bash
-  npm run dev:backend
-  # Server will run on http://localhost:5000
-  ```
-- **Terminal 2 (Frontend):**
-  ```bash
-  npm run dev:frontend
-  # Web UI will run on http://localhost:5173
-  ```
+To verify the connection, run a query with your configured connection URL:
 
-**Option B: Root Scripts**
 ```bash
-npm run dev
+psql 'postgresql://postgres:postgres@localhost:5432/tutoring_scheduler' -c 'SELECT 1;'
 ```
 
----
+After starting the backend, `GET http://localhost:5000/api/health` also reports whether PostgreSQL is connected.
 
-## 🧪 Testing & CI
+## Background reminders and email
 
-The backend suite contains the real regression tests and API coverage:
+Reminder jobs are stored in the PostgreSQL `reminder_jobs` table. Booking creation schedules confirmation, 24-hour, and 1-hour jobs where the scheduled time is still in the future. The backend server starts an in-process worker that polls for due jobs every 15 seconds by default; no Redis, RabbitMQ, or separate worker command is used.
+
+Set `SMTP_HOST` and, if needed, `SMTP_PORT`, `SMTP_USER`, and `SMTP_PASSWORD` in `backend/.env` to deliver email through an SMTP server. Without an SMTP host, the development mailer writes message details to the backend console and sends no email. Do not use production SMTP credentials in local configuration or CI.
+
+The worker's overlap guard is local to one server process, and the current due-job query does not claim/lock rows across processes. Run a single backend instance for reminder processing; multiple instances can try to send the same due job. The default retry threshold marks a job failed after three failed send attempts total (the initial attempt plus two retries), rather than three retries after the initial attempt. Reminder worker and email delivery behavior do not yet have automated tests.
+
+## Run the application
+
+Make sure PostgreSQL is running, `backend/.env` is configured, and migrations have completed. Start the backend and frontend in separate terminals:
+
 ```bash
-# From the project root
-# Run backend tests, including auth, profile, slot, booking, health, and rating coverage
-npm test --prefix backend
-
-# Run one backend test file from the project root
-cd backend && node --test test/auth.test.js
+# Terminal 1, from the repository root
+npm run dev:backend
 ```
 
-The booking concurrency integration test uses PostgreSQL. Configure `DATABASE_URL`
-or set `RUN_DB_INTEGRATION_TESTS=true` when using the `DB_*` settings, then run
-the migrations to include it. It is skipped by default unless a database URL is
-configured or the opt-in flag is set. CI provisions PostgreSQL, migrates the
-schema, and runs the complete backend suite.
+The API listens at `http://localhost:5000`; its health endpoint is `http://localhost:5000/api/health`.
 
-The root `npm test` command also invokes the frontend test script, which is
-currently only a placeholder message and does not run a frontend test suite.
-Use the backend command above when you want the actual regression tests.
-
-The root lint command invokes the workspace scripts; the backend currently prints
-a syntax-check message and the frontend lint script is a placeholder. The root
-build command invokes a backend message-based check and creates the real Vite
-production bundle for the frontend.
-
-Run these workspace checks before submitting a PR:
 ```bash
-npm run lint
-
-npm run build
+# Terminal 2, from the repository root
+npm run dev:frontend
 ```
 
----
+Vite serves the web app at `http://localhost:5173` and proxies `/api` requests to the backend. Stop either process with Ctrl+C. `npm run dev` also starts both development scripts from the root.
 
-## 📡 API Conventions
+## Tests, lint, build, and CI
 
-### Base URL
-All API endpoints are prefixed with `/api`.
+Run the backend tests from the root:
 
-### Standard Health Endpoint
-- **`GET /api/health`**
-- Response:
-  ```json
-  {
-    "status": "ok",
-    "service": "peer-to-peer-tutoring-api",
-    "uptimeSeconds": 42,
-    "timestampUtc": "2026-10-19T16:20:00.000Z",
-    "database": {
-      "status": "connected",
-      "serverTimeUtc": "2026-10-19 16:20:00.000+00"
-    },
-    "version": "1.0.0"
-  }
-  ```
+```bash
+npm test
+```
 
-### Timezone Rule
-- **All dates and timestamps must be in UTC ISO-8601 string format** (e.g. `2026-10-20T14:00:00.000Z`).
-- The database stores all time fields as `TIMESTAMP WITH TIME ZONE`.
+To run one test file:
 
-### Unified Error Response Shape
-All errors return consistent HTTP status codes (400, 401, 403, 404, 409, 422, 500) and this JSON envelope:
+```bash
+cd backend
+node --test test/auth.test.js
+```
+
+The booking concurrency test in `backend/test/booking.test.js` is a PostgreSQL integration test. It uses the real database pool/client, creates random test users and a slot, submits concurrent booking requests, checks the persisted rows, and cleans up. It runs when `DATABASE_URL` is configured or when `RUN_DB_INTEGRATION_TESTS=true` is set; the database must have been migrated first. For example, with the local development database configured in `backend/.env`:
+
+```bash
+cd backend
+RUN_DB_INTEGRATION_TESTS=true node --test test/booking.test.js
+```
+
+A connection URL supplied in the shell is another option:
+
+```bash
+DATABASE_URL='postgresql://postgres:postgres@localhost:5432/tutoring_scheduler' npm test
+```
+
+The root checks are:
+
+```bash
+npm run validate:env  # checks all three templates for expected keys, malformed assignments, and a placeholder JWT secret
+npm run lint          # runs node --check over backend/src and backend/test JavaScript files
+npm run build         # backend syntax check and frontend Vite production build
+```
+
+The frontend package's own `test` and `lint` scripts are placeholders that only print messages. The root `npm test` and `npm run lint` do not call those placeholders. There is no frontend unit-test suite or configured ESLint rule set; the production build does compile the React/Vite app.
+
+GitHub Actions runs on pushes to `main` and pull requests targeting `main`. It uses `npm ci`, validates the environment templates, checks backend JavaScript syntax, waits for a healthy PostgreSQL 15 service, applies migrations, runs the backend tests with the PostgreSQL concurrency integration test enabled, and builds both workspaces. CI uses disposable test credentials from environment variables and does not configure SMTP.
+
+See [test traceability and sprint evidence](docs/test-traceability-and-sprint-evidence.md) for the current SRS-to-test mapping, automation gaps, recorded Sprint 1 demo artifact, and an evidence checklist for future demos.
+
+## API conventions
+
+All API endpoints use the `/api` prefix. The health endpoint is `GET /api/health`. Successful responses and errors are JSON; errors use a shared envelope:
+
 ```json
 {
   "error": {
@@ -205,38 +192,25 @@ All errors return consistent HTTP status codes (400, 401, 403, 404, 409, 422, 50
 }
 ```
 
-### Booking Authentication
+All dates and timestamps use UTC ISO 8601 strings. PostgreSQL stores time fields as `TIMESTAMP WITH TIME ZONE`.
 
-Booking requests must use a bearer token issued by `POST /api/auth/login`.
-The booking API derives the tutee identity from that verified token; `tuteeId`
-is not accepted from the request body.
+### Booking authentication and development seed accounts
 
-For the development seed users, the passwords are:
+Booking requests use a bearer token from `POST /api/auth/login`; the API takes the tutee identity from that token rather than accepting a `tuteeId` in the request body.
+
+The seed command creates these development accounts:
 
 - `alice.tutor@university.edu` / `alice-password`
 - `bob.tutee@university.edu` / `bob-password`
 - `admin@university.edu` / `admin-password`
 
-Do not use these development credentials outside a local environment. Production
-deployments must set a strong `JWT_SECRET`.
+These are sample credentials for a local development database only. Do not reuse them outside development. Production must use a strong `JWT_SECRET` and real deployment-managed secrets.
 
----
+## Known setup and testing limitations
 
-## 👥 Feature Branching & Handoff Guidelines
-
-1. **Pull Latest Main**:
-   ```bash
-   git checkout main
-   git pull origin main
-   ```
-2. **Create a Feature Branch** named after your assigned issue:
-   ```bash
-   git checkout -b feature/issue-<number>-<short-description>
-   # e.g., git checkout -b feature/issue-2-user-auth
-   ```
-3. **Commit Conventions**:
-   - Write descriptive commits referencing the issue ID: `feat(auth): implement JWT token verification (closes #2)`
-   - **Never commit `.env` or sensitive credentials.**
-4. **Submit a Pull Request**:
-   - Verify all tests and builds pass (`npm test`, `npm run build`).
-   - Request review before merging into `main`.
+- The frontend has no real unit-test or lint suite yet; its package scripts remain placeholders.
+- The backend lint check verifies JavaScript syntax only. It does not enforce style or static-analysis rules.
+- CI does not cover browser end-to-end behavior, accessibility, load/performance, email delivery, or every requirement in the assignment test plan.
+- Reminder delivery is currently safe to run as a single backend process only; see the worker limitation above.
+- The SRS/Test Plan contains requirements without matching automated tests. The linked traceability note lists the current coverage and gaps without treating missing tests as evidence of manual pass/fail results.
+- The Vite production build currently emits non-failing deprecation warnings from the React plugin and dependency optimization configuration; the build completes successfully.
