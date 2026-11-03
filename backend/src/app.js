@@ -6,10 +6,8 @@ const { errorHandler, AppError } = require('./middleware/error');
 const healthRoutes = require('./routes/health.routes');
 const slotRoutes = require('./routes/slot.routes');
 const bookingRoutes = require('./routes/booking.routes');
-
 const profileRoutes = require('./routes/profile.routes');
 const authRoutes = require('./routes/auth.routes');
-
 
 const app = express();
 
@@ -17,9 +15,14 @@ const app = express();
 if (config.env === 'development') {
   app.use((req, res, next) => {
     const start = Date.now();
+    const requestPath = req.path;
+
     res.on('finish', () => {
-      console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${res.statusCode} (${Date.now() - start}ms)`);
+      console.log(
+        `[${new Date().toISOString()}] ${req.method} ${requestPath} ${res.statusCode} (${Date.now() - start}ms)`
+      );
     });
+
     next();
   });
 }
@@ -29,6 +32,7 @@ app.use(cors({
   origin: config.clientOrigin,
   credentials: true
 }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -44,7 +48,13 @@ app.use(`${config.apiPrefix}/profile`, profileRoutes);
 
 // 404 Handler for undefined routes
 app.use((req, res, next) => {
-  next(new AppError(`Endpoint not found: ${req.method} ${req.originalUrl}`, 404, 'NOT_FOUND'));
+  next(
+    new AppError(
+      `Endpoint not found: ${req.method} ${req.path}`,
+      404,
+      'NOT_FOUND'
+    )
+  );
 });
 
 // Central Error Handler
