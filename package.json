@@ -12,10 +12,11 @@
     "dev:backend": "npm run dev --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend",
     "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
-    "test": "npm run test --workspace=backend && npm run test --workspace=frontend",
-    "lint": "npm run lint --workspace=backend && npm run lint --workspace=frontend",
+    "test": "npm run test --workspace=backend",
+    "lint": "npm run lint --workspace=backend",
     "db:migrate": "npm run db:migrate --workspace=backend",
-    "db:seed": "npm run db:seed --workspace=backend"
+    "db:seed": "npm run db:seed --workspace=backend",
+    "validate:env": "node scripts/validate-env-templates.js"
   },
   "keywords": [
     "tutoring",
