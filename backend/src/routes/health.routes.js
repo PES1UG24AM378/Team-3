@@ -9,23 +9,39 @@ const router = express.Router();
  * @desc System health check endpoint for frontend & CI/monitoring
  */
 router.get('/', async (req, res) => {
-  const dbHealth = await db.checkHealth();
+  try {
+    const dbHealth = await db.checkHealth();
 
-  const status = dbHealth.connected ? 'ok' : 'degraded';
-  const statusCode = dbHealth.connected ? 200 : 503;
+    const connected = Boolean(dbHealth.connected);
+    const status = connected ? 'ok' : 'degraded';
+    const statusCode = connected ? 200 : 503;
 
-  res.status(statusCode).json({
-    status,
-    service: 'peer-to-peer-tutoring-api',
-    uptimeSeconds: Math.floor(process.uptime()),
-    timestampUtc: currentUtcIso(),
-    database: {
-      status: dbHealth.connected ? 'connected' : 'disconnected',
-      serverTimeUtc: dbHealth.timestampUtc || null,
-      error: dbHealth.error || null
-    },
-    version: '1.0.0'
-  });
+    res.status(statusCode).json({
+      status,
+      service: 'peer-to-peer-tutoring-api',
+      uptimeSeconds: Math.floor(process.uptime()),
+      timestampUtc: currentUtcIso(),
+      database: {
+        status: connected ? 'connected' : 'disconnected',
+        serverTimeUtc: connected ? dbHealth.timestampUtc || null : null,
+        error: connected ? null : 'Database connection unavailable'
+      },
+      version: '1.0.0'
+    });
+  } catch (err) {
+    res.status(503).json({
+      status: 'degraded',
+      service: 'peer-to-peer-tutoring-api',
+      uptimeSeconds: Math.floor(process.uptime()),
+      timestampUtc: currentUtcIso(),
+      database: {
+        status: 'disconnected',
+        serverTimeUtc: null,
+        error: 'Database connection unavailable'
+      },
+      version: '1.0.0'
+    });
+  }
 });
 
 module.exports = router;
