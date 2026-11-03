@@ -1,3 +1,4 @@
+
 const express = require('express');
 const { TutorProfileModel } = require('../models');
 const { AppError } = require('../middleware/error');
@@ -5,12 +6,28 @@ const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
+function sanitizePlainText(value) {
+  return value
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+    .trim();
+}
+
+function containsHtml(value) {
+  return /<\/?[a-z][^>]*>/i.test(value);
+}
+
 function validateProfileInput(body) {
   const { bio, subjects, hourlyRate } = body;
 
-  if (bio !== undefined &&
-      (typeof bio !== 'string' || bio.length > 2000)) {
+  if (
+    bio !== undefined &&
+    (typeof bio !== 'string' || bio.length > 2000)
+  ) {
     return 'bio must be a string of at most 2000 characters';
+  }
+
+  if (typeof bio === 'string' && containsHtml(bio)) {
+    return 'bio must contain plain text, not HTML';
   }
 
   if (subjects !== undefined) {
@@ -25,6 +42,10 @@ function validateProfileInput(body) {
       )
     ) {
       return 'subjects must be an array of up to 20 non-empty strings, each at most 100 characters';
+    }
+
+    if (subjects.some(containsHtml)) {
+      return 'subjects must contain plain text, not HTML';
     }
   }
 
@@ -109,9 +130,9 @@ router.put('/', authenticate, async (req, res, next) => {
 
     const profile = await TutorProfileModel.upsert({
       userId: req.user.id,
-      bio: typeof bio === 'string' ? bio.trim() : bio,
+      bio: typeof bio === 'string' ? sanitizePlainText(bio) : bio,
       subjects: Array.isArray(subjects)
-        ? subjects.map((subject) => subject.trim())
+        ? subjects.map(sanitizePlainText)
         : subjects,
       hourlyRate
     });

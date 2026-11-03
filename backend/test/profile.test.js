@@ -151,3 +151,44 @@ test('profile update rejects a negative hourly rate', async () => {
   assert.equal(response.status, 422);
   assert.equal(response.body.error.code, 'VALIDATION_ERROR');
 });
+
+test('profile update rejects HTML in bio', async () => {
+  const response = await request(app)
+    .put('/api/profile')
+    .set(authenticatedRequest(23))
+    .send({ bio: '<script>alert("xss")</script>' });
+
+  assert.equal(response.status, 422);
+  assert.equal(response.body.error.code, 'VALIDATION_ERROR');
+});
+
+test('profile update rejects HTML in subjects', async () => {
+  const response = await request(app)
+    .put('/api/profile')
+    .set(authenticatedRequest(23))
+    .send({ subjects: ['<b>Physics</b>'] });
+
+  assert.equal(response.status, 422);
+  assert.equal(response.body.error.code, 'VALIDATION_ERROR');
+});
+
+test('profile update removes control characters from plain text', async () => {
+  let savedValues;
+
+  TutorProfileModel.upsert = async (values) => {
+    savedValues = values;
+    return { ...profile, ...values };
+  };
+
+  const response = await request(app)
+    .put('/api/profile')
+    .set(authenticatedRequest(23))
+    .send({
+      bio: 'Physics\u0000 tutor',
+      subjects: ['Physics\u0000']
+    });
+
+  assert.equal(response.status, 200);
+  assert.equal(savedValues.bio, 'Physics tutor');
+  assert.deepEqual(savedValues.subjects, ['Physics']);
+});
