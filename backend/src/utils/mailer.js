@@ -26,9 +26,7 @@ function createTransport() {
   return {
     sendMail: async (mailOptions) => {
       console.log('--- [DEV MODE] No SMTP_HOST configured, email not actually sent ---');
-      console.log('To:', mailOptions.to);
-      console.log('Subject:', mailOptions.subject);
-      console.log('Body:\n', mailOptions.text);
+      console.log('Email prepared in development mode (recipient/content not logged).');
       console.log('--- end email ---');
       return { messageId: `dev-${Date.now()}` };
     }

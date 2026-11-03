@@ -32,8 +32,11 @@ function errorHandler(err, req, res, next) {
   }
 
   if (statusCode >= 500) {
-    console.error(`[ERROR] ${req.method} ${req.originalUrl}:`, err);
-  }
+  console.error(
+    `[ERROR] ${req.method} ${req.path}: ${err.code || 'INTERNAL_SERVER_ERROR'}`
+  );
+}
+  
 
   res.status(statusCode).json(response);
 }
