@@ -6,8 +6,11 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 dotenv.config();
 
 const jwtSecret = process.env.JWT_SECRET || 'dev_insecure_jwt_secret_team3';
-if (process.env.NODE_ENV === 'production' && jwtSecret === 'dev_insecure_jwt_secret_team3') {
-  throw new Error('JWT_SECRET must be configured in production');
+
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.JWT_SECRET || jwtSecret.length < 32) {
+    throw new Error('JWT_SECRET must be configured with at least 32 characters in production');
+  }
 }
 
 const config = {

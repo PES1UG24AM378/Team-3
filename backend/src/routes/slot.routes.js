@@ -3,7 +3,7 @@ const { AvailabilitySlotModel } = require('../models');
 const { validate } = require('../middleware/validator');
 const { AppError } = require('../middleware/error');
 const { toUtcIso } = require('../utils/timezone');
-const { devAuth } = require('../middleware/devAuth');
+const { authenticate } = require('../middleware/auth');
 const router = express.Router();
 
 /**
@@ -61,7 +61,7 @@ router.get('/:id', async (req, res, next) => {
  */
 router.post(
   '/',
-  devAuth,
+  authenticate,
   validate({
     body: {
       subject: { required: true },
@@ -108,7 +108,7 @@ router.post(
  */
 router.put(
   '/:id',
-  devAuth,
+  authenticate,
   validate({
     body: {
       subject: { required: true },
@@ -162,7 +162,7 @@ router.put(
  * @route DELETE /api/slots/:id
  * @desc Remove an availability slot (TUT-F-013 range)
  */
-router.delete('/:id', devAuth, async (req, res, next) => {
+router.delete('/:id', authenticate, async (req, res, next) => {
   try {
     const slot = await AvailabilitySlotModel.findById(req.params.id);
     if (!slot) {

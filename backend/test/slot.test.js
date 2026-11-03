@@ -2,7 +2,8 @@ const { test, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const request = require('supertest');
 const app = require('../src/app');
-const { AvailabilitySlotModel } = require('../src/models');
+const { AvailabilitySlotModel, UserModel } = require('../src/models');
+const { signToken } = require('../src/middleware/auth');
 
 const originals = {
   findById: AvailabilitySlotModel.findById,
@@ -10,7 +11,8 @@ const originals = {
   checkOverlap: AvailabilitySlotModel.checkOverlap,
   create: AvailabilitySlotModel.create,
   update: AvailabilitySlotModel.update,
-  updateStatus: AvailabilitySlotModel.updateStatus
+  updateStatus: AvailabilitySlotModel.updateStatus,
+  userFindById: UserModel.findById
 };
 
 const slot = {
@@ -23,13 +25,67 @@ const slot = {
   status: 'available'
 };
 
+const tutorToken = signToken({
+  sub: 7,
+  iat: Math.floor(Date.now() / 1000),
+  exp: Math.floor(Date.now() / 1000) + 3600
+});
+
+const otherTutorToken = signToken({
+  sub: 8,
+  iat: Math.floor(Date.now() / 1000),
+  exp: Math.floor(Date.now() / 1000) + 3600
+});
+
 beforeEach(() => {
-  AvailabilitySlotModel.findById = async (id) => Number(id) === slot.id ? slot : null;
+  AvailabilitySlotModel.findById = async (id) =>
+    Number(id) === slot.id ? slot : null;
+
   AvailabilitySlotModel.search = async () => [slot];
+
   AvailabilitySlotModel.checkOverlap = async () => false;
-  AvailabilitySlotModel.create = async (values) => ({ id: 32, ...values, status: 'available' });
-  AvailabilitySlotModel.update = async (id, values) => ({ ...slot, id, ...values });
-  AvailabilitySlotModel.updateStatus = async (id, status) => ({ ...slot, id, status });
+
+  AvailabilitySlotModel.create = async (values) => ({
+    id: 32,
+    ...values,
+    status: 'available'
+  });
+
+  AvailabilitySlotModel.update = async (id, values) => ({
+    ...slot,
+    id,
+    ...values
+  });
+
+  AvailabilitySlotModel.updateStatus = async (id, status) => ({
+    ...slot,
+    id,
+    status
+  });
+
+  UserModel.findById = async (id) => {
+    if (id === 7) {
+      return {
+        id: 7,
+        name: 'Test Tutor',
+        email: 'tutor7@example.com',
+        role: 'tutor',
+        is_verified: true
+      };
+    }
+
+    if (id === 8) {
+      return {
+        id: 8,
+        name: 'Other Tutor',
+        email: 'tutor8@example.com',
+        role: 'tutor',
+        is_verified: true
+      };
+    }
+
+    return null;
+  };
 });
 
 afterEach(() => {
@@ -39,6 +95,7 @@ afterEach(() => {
   AvailabilitySlotModel.create = originals.create;
   AvailabilitySlotModel.update = originals.update;
   AvailabilitySlotModel.updateStatus = originals.updateStatus;
+  UserModel.findById = originals.userFindById;
 });
 
 test('slot search returns matching slots and a count', async () => {
@@ -50,7 +107,8 @@ test('slot search returns matching slots and a count', async () => {
 });
 
 test('slot search rejects invalid filters before querying the model', async () => {
-  AvailabilitySlotModel.search = async () => assert.fail('invalid filters must not query slots');
+  AvailabilitySlotModel.search = async () =>
+    assert.fail('invalid filters must not query slots');
 
   const response = await request(app).get('/api/slots?minRating=6');
 
@@ -65,26 +123,39 @@ test('slot details return 404 for a missing slot', async () => {
   assert.equal(response.body.error.code, 'SLOT_NOT_FOUND');
 });
 
-test('creating a slot requires an authenticated development identity', async () => {
+test('creating a slot requires authentication', async () => {
   const response = await request(app)
     .post('/api/slots')
-    .send({ subject: 'Algebra', startTime: '2030-01-01T10:00:00.000Z', durationMinutes: 60 });
+    .send({
+      subject: 'Algebra',
+      startTime: '2030-01-01T10:00:00.000Z',
+      durationMinutes: 60
+    });
 
   assert.equal(response.status, 401);
-  assert.equal(response.body.error.code, 'UNAUTHORIZED');
+  assert.equal(response.body.error.code, 'AUTHENTICATION_REQUIRED');
 });
 
 test('creating a valid slot records it for the signed-in tutor', async () => {
   let createValues;
+
   AvailabilitySlotModel.create = async (values) => {
     createValues = values;
-    return { id: 32, ...values, status: 'available' };
+    return {
+      id: 32,
+      ...values,
+      status: 'available'
+    };
   };
 
   const response = await request(app)
     .post('/api/slots')
-    .set('x-user-id', '7')
-    .send({ subject: 'Algebra', startTime: '2030-01-01T10:00:00.000Z', durationMinutes: 60 });
+    .set('Authorization', `Bearer ${tutorToken}`)
+    .send({
+      subject: 'Algebra',
+      startTime: '2030-01-01T10:00:00.000Z',
+      durationMinutes: 60
+    });
 
   assert.equal(response.status, 201);
   assert.equal(response.body.data.tutorId, 7);
@@ -97,18 +168,26 @@ test('creating an overlapping slot returns 409', async () => {
 
   const response = await request(app)
     .post('/api/slots')
-    .set('x-user-id', '7')
-    .send({ subject: 'Algebra', startTime: '2030-01-01T10:00:00.000Z', durationMinutes: 60 });
+    .set('Authorization', `Bearer ${tutorToken}`)
+    .send({
+      subject: 'Algebra',
+      startTime: '2030-01-01T10:00:00.000Z',
+      durationMinutes: 60
+    });
 
   assert.equal(response.status, 409);
   assert.equal(response.body.error.code, 'SLOT_OVERLAP');
 });
 
-test('a tutor cannot edit another tutor’s slot', async () => {
+test('a tutor cannot edit another tutor\'s slot', async () => {
   const response = await request(app)
     .put('/api/slots/31')
-    .set('x-user-id', '8')
-    .send({ subject: 'Algebra', startTime: '2030-01-01T10:00:00.000Z', durationMinutes: 60 });
+    .set('Authorization', `Bearer ${otherTutorToken}`)
+    .send({
+      subject: 'Algebra',
+      startTime: '2030-01-01T10:00:00.000Z',
+      durationMinutes: 60
+    });
 
   assert.equal(response.status, 403);
   assert.equal(response.body.error.code, 'FORBIDDEN');
@@ -117,7 +196,7 @@ test('a tutor cannot edit another tutor’s slot', async () => {
 test('a tutor can remove their available slot', async () => {
   const response = await request(app)
     .delete('/api/slots/31')
-    .set('x-user-id', '7');
+    .set('Authorization', `Bearer ${tutorToken}`);
 
   assert.equal(response.status, 200);
   assert.equal(response.body.data.status, 'removed');

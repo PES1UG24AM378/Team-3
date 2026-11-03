@@ -1,7 +1,7 @@
 const express = require('express');
 const { TutorProfileModel } = require('../models');
 const { AppError } = require('../middleware/error');
-const { devAuth } = require('../middleware/devAuth');
+const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -9,7 +9,7 @@ const router = express.Router();
  * @route GET /api/profile
  * @desc Get the signed-in user's own tutor profile (TUT-F-004)
  */
-router.get('/', devAuth, async (req, res, next) => {
+router.get('/', authenticate, async (req, res, next) => {
   try {
     const profile = await TutorProfileModel.findByUserId(req.user.id);
     if (!profile) {
@@ -41,7 +41,7 @@ router.get('/:userId', async (req, res, next) => {
  * @route PUT /api/profile
  * @desc Create or update the signed-in user's tutor profile (TUT-F-004)
  */
-router.put('/', devAuth, async (req, res, next) => {
+router.put('/', authenticate, async (req, res, next) => {
   try {
     const { bio, subjects, hourlyRate } = req.body;
 
