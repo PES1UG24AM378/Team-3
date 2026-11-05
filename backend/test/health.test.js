@@ -30,6 +30,7 @@ test('GET /api/health should return 200 or 503 with standard health schema', asy
   assert.ok(res.status === 200 || res.status === 503);
 
   const data = await res.json();
+
   assert.strictEqual(data.service, 'peer-to-peer-tutoring-api');
   assert.ok(typeof data.timestampUtc === 'string');
   assert.ok(data.database);
@@ -41,6 +42,7 @@ test('GET /api/nonexistent-route should return unified 404 error format', async 
   assert.strictEqual(res.status, 404);
 
   const data = await res.json();
+
   assert.ok(data.error);
   assert.strictEqual(data.error.code, 'NOT_FOUND');
   assert.ok(data.error.timestamp);
@@ -80,27 +82,56 @@ test('POST /api/slots with missing fields should return 422 with validation erro
   }
 });
 
+test('POST /api/slots requires authentication before validating the request body', async () => {
+  const res = await fetch(`${baseUrl}/api/slots`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({})
+  });
+
+  assert.strictEqual(res.status, 401);
+
+  const data = await res.json();
+
+  assert.strictEqual(data.error.code, 'AUTHENTICATION_REQUIRED');
+});
+
 test('POST /api/bookings requires an authenticated identity', async () => {
   const res = await fetch(`${baseUrl}/api/bookings`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json'
+    },
     body: JSON.stringify({ slotId: 1 })
   });
 
   assert.strictEqual(res.status, 401);
 
   const data = await res.json();
+
   assert.strictEqual(data.error.code, 'AUTHENTICATION_REQUIRED');
 });
 
 test('GET /api/slots rejects invalid search filters before querying the database', async () => {
-  const invalidDate = await fetch(`${baseUrl}/api/slots?from=not-a-date`);
+  const invalidDate = await fetch(
+    `${baseUrl}/api/slots?from=not-a-date`
+  );
 
   assert.strictEqual(invalidDate.status, 422);
-  assert.strictEqual((await invalidDate.json()).error.code, 'VALIDATION_ERROR');
+  assert.strictEqual(
+    (await invalidDate.json()).error.code,
+    'VALIDATION_ERROR'
+  );
 
-  const invalidRating = await fetch(`${baseUrl}/api/slots?minRating=6`);
+  const invalidRating = await fetch(
+    `${baseUrl}/api/slots?minRating=6`
+  );
 
   assert.strictEqual(invalidRating.status, 422);
-  assert.strictEqual((await invalidRating.json()).error.code, 'VALIDATION_ERROR');
+  assert.strictEqual(
+    (await invalidRating.json()).error.code,
+    'VALIDATION_ERROR'
+  );
 });

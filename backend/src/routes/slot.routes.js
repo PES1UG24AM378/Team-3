@@ -91,7 +91,13 @@ router.post(
   async (req, res, next) => {
     try {
       const tutorId = req.user.id;
-      const { subject, startTime, durationMinutes, isRecurring, recurrencePattern } = req.body;
+      const {
+        subject,
+        startTime,
+        durationMinutes,
+        isRecurring,
+        recurrencePattern
+      } = req.body;
 
       const startTimeUtc = toUtcIso(startTime);
       const endTimeUtc = new Date(

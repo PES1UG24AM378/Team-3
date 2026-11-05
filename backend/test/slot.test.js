@@ -33,31 +33,57 @@ function authToken(userId) {
 }
 
 function authenticatedRequest(userId) {
-  return { Authorization: `Bearer ${authToken(userId)}` };
+  return {
+    Authorization: `Bearer ${authToken(userId)}`
+  };
 }
 
 beforeEach(() => {
-  UserModel.findById = async (id) => ({
-    id: Number(id),
-    is_verified: true,
-    role: 'tutor'
-  });
+  UserModel.findById = async (id) => {
+    const userId = Number(id);
+
+    if (userId === 7) {
+      return {
+        id: 7,
+        name: 'Test Tutor',
+        email: 'tutor7@example.com',
+        role: 'tutor',
+        is_verified: true
+      };
+    }
+
+    if (userId === 8) {
+      return {
+        id: 8,
+        name: 'Other Tutor',
+        email: 'tutor8@example.com',
+        role: 'tutor',
+        is_verified: true
+      };
+    }
+
+    return null;
+  };
 
   AvailabilitySlotModel.findById = async (id) =>
     Number(id) === slot.id ? slot : null;
 
   AvailabilitySlotModel.search = async () => [slot];
+
   AvailabilitySlotModel.checkOverlap = async () => false;
+
   AvailabilitySlotModel.create = async (values) => ({
     id: 32,
     ...values,
     status: 'available'
   });
+
   AvailabilitySlotModel.update = async (id, values) => ({
     ...slot,
     id,
     ...values
   });
+
   AvailabilitySlotModel.updateStatus = async (id, status) => ({
     ...slot,
     id,
@@ -118,7 +144,11 @@ test('creating a valid slot records it for the signed-in tutor', async () => {
 
   AvailabilitySlotModel.create = async (values) => {
     createValues = values;
-    return { id: 32, ...values, status: 'available' };
+    return {
+      id: 32,
+      ...values,
+      status: 'available'
+    };
   };
 
   const response = await request(app)
@@ -152,7 +182,7 @@ test('creating an overlapping slot returns 409', async () => {
   assert.equal(response.body.error.code, 'SLOT_OVERLAP');
 });
 
-test('a tutor cannot edit another tutor’s slot', async () => {
+test('a tutor cannot edit another tutor\'s slot', async () => {
   const response = await request(app)
     .put('/api/slots/31')
     .set(authenticatedRequest(8))

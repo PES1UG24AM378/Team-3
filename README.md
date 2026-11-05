@@ -82,6 +82,16 @@ The templates contain local development values only. Review and adjust `backend/
 | `REMINDER_POLL_INTERVAL_MS`, `REMINDER_RETRY_BASE_MINUTES`, `REMINDER_MAX_RETRIES` | Optional | Reminder worker poll interval and retry settings. Defaults are 15000 ms, 1 minute, and 3 attempts. These settings belong in `backend/.env`. |
 | `VITE_API_BASE_URL` | Not currently consumed by the frontend. | The template value is `/api`; the current app uses `/api` directly. |
 
+### Transport Security
+
+Production deployments must serve application traffic over HTTPS and enforce TLS 1.2 or higher. TLS termination should be configured at the deployment platform, load balancer, reverse proxy, or ingress layer used to expose the application.
+
+HTTP is permitted only for local development on `localhost` (for example, `http://localhost:5173` and `http://localhost:5000`). This local exception avoids requiring TLS certificates during development and must not be used for production traffic.
+
+Production database connections should also use SSL/TLS (`DB_SSL=true`) where supported. Local development may use `DB_SSL=false` for the local PostgreSQL instance.
+
+Production secrets, including `JWT_SECRET` and database credentials, must be supplied through the deployment environment or a secret manager and must not be committed to the repository.
+
 ## Database setup
 
 Start PostgreSQL, then create the development database. With the default local PostgreSQL role:

@@ -26,15 +26,37 @@ function authToken(userId) {
 }
 
 function authenticatedRequest(userId) {
-  return { Authorization: `Bearer ${authToken(userId)}` };
+  return {
+    Authorization: `Bearer ${authToken(userId)}`
+  };
 }
 
 beforeEach(() => {
-  UserModel.findById = async (id) => ({
-    id: Number(id),
-    is_verified: true,
-    role: 'tutor'
-  });
+  UserModel.findById = async (id) => {
+    const userId = Number(id);
+
+    if (userId === 23) {
+      return {
+        id: 23,
+        name: 'Test Tutor',
+        email: 'tutor@example.com',
+        role: 'tutor',
+        is_verified: true
+      };
+    }
+
+    if (userId === 99) {
+      return {
+        id: 99,
+        name: 'Test User',
+        email: 'user99@example.com',
+        role: 'tutor',
+        is_verified: true
+      };
+    }
+
+    return null;
+  };
 
   TutorProfileModel.findByUserId = async (userId) =>
     Number(userId) === 23 ? profile : null;
@@ -51,7 +73,7 @@ afterEach(() => {
   UserModel.findById = originals.findUserById;
 });
 
-test('profile endpoint requires authentication', async () => {
+test('profile endpoint requires authentication for a private profile', async () => {
   const response = await request(app).get('/api/profile');
 
   assert.equal(response.status, 401);
