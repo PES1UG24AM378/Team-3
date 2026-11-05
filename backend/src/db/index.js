@@ -23,29 +23,32 @@ function getPool() {
       connectionTimeoutMillis: 5000
     });
 
-    pool.on('error', (err) => {
-      console.error('Unexpected error on idle PostgreSQL client:', err);
+    pool.on('error', () => {
+      console.error('Unexpected error on idle PostgreSQL client.');
     });
   }
+
   return pool;
 }
 
 /**
- * Execute a query with parameters
+ * Execute a query with parameters.
  */
 async function query(text, params) {
   const p = getPool();
   const start = Date.now();
   const res = await p.query(text, params);
   const duration = Date.now() - start;
+
   if (config.env === 'development') {
-    // optional query debug logging
+    // Optional query debug logging.
   }
+
   return res;
 }
 
 /**
- * Acquire a client for manual transaction control
+ * Acquire a client for manual transaction control.
  */
 async function getClient() {
   const p = getPool();
@@ -53,11 +56,14 @@ async function getClient() {
 }
 
 /**
- * Check connectivity to the database
+ * Check connectivity to the database.
  */
 async function checkHealth() {
   try {
-    const res = await query('SELECT NOW() AT TIME ZONE \'UTC\' as now_utc');
+    const res = await query(
+      "SELECT NOW() AT TIME ZONE 'UTC' as now_utc"
+    );
+
     return {
       connected: true,
       timestampUtc: res.rows[0].now_utc

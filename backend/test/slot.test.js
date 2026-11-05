@@ -12,7 +12,7 @@ const originals = {
   create: AvailabilitySlotModel.create,
   update: AvailabilitySlotModel.update,
   updateStatus: AvailabilitySlotModel.updateStatus,
-  userFindById: UserModel.findById
+  findUserById: UserModel.findById
 };
 
 const slot = {
@@ -25,19 +25,46 @@ const slot = {
   status: 'available'
 };
 
-const tutorToken = signToken({
-  sub: 7,
-  iat: Math.floor(Date.now() / 1000),
-  exp: Math.floor(Date.now() / 1000) + 3600
-});
+function authToken(userId) {
+  return signToken({
+    sub: String(userId),
+    exp: Math.floor(Date.now() / 1000) + 3600
+  });
+}
 
-const otherTutorToken = signToken({
-  sub: 8,
-  iat: Math.floor(Date.now() / 1000),
-  exp: Math.floor(Date.now() / 1000) + 3600
-});
+function authenticatedRequest(userId) {
+  return {
+    Authorization: `Bearer ${authToken(userId)}`
+  };
+}
 
 beforeEach(() => {
+  UserModel.findById = async (id) => {
+    const userId = Number(id);
+
+    if (userId === 7) {
+      return {
+        id: 7,
+        name: 'Test Tutor',
+        email: 'tutor7@example.com',
+        role: 'tutor',
+        is_verified: true
+      };
+    }
+
+    if (userId === 8) {
+      return {
+        id: 8,
+        name: 'Other Tutor',
+        email: 'tutor8@example.com',
+        role: 'tutor',
+        is_verified: true
+      };
+    }
+
+    return null;
+  };
+
   AvailabilitySlotModel.findById = async (id) =>
     Number(id) === slot.id ? slot : null;
 
@@ -62,30 +89,6 @@ beforeEach(() => {
     id,
     status
   });
-
-  UserModel.findById = async (id) => {
-    if (id === 7) {
-      return {
-        id: 7,
-        name: 'Test Tutor',
-        email: 'tutor7@example.com',
-        role: 'tutor',
-        is_verified: true
-      };
-    }
-
-    if (id === 8) {
-      return {
-        id: 8,
-        name: 'Other Tutor',
-        email: 'tutor8@example.com',
-        role: 'tutor',
-        is_verified: true
-      };
-    }
-
-    return null;
-  };
 });
 
 afterEach(() => {
@@ -95,7 +98,7 @@ afterEach(() => {
   AvailabilitySlotModel.create = originals.create;
   AvailabilitySlotModel.update = originals.update;
   AvailabilitySlotModel.updateStatus = originals.updateStatus;
-  UserModel.findById = originals.userFindById;
+  UserModel.findById = originals.findUserById;
 });
 
 test('slot search returns matching slots and a count', async () => {
@@ -150,7 +153,7 @@ test('creating a valid slot records it for the signed-in tutor', async () => {
 
   const response = await request(app)
     .post('/api/slots')
-    .set('Authorization', `Bearer ${tutorToken}`)
+    .set(authenticatedRequest(7))
     .send({
       subject: 'Algebra',
       startTime: '2030-01-01T10:00:00.000Z',
@@ -168,7 +171,7 @@ test('creating an overlapping slot returns 409', async () => {
 
   const response = await request(app)
     .post('/api/slots')
-    .set('Authorization', `Bearer ${tutorToken}`)
+    .set(authenticatedRequest(7))
     .send({
       subject: 'Algebra',
       startTime: '2030-01-01T10:00:00.000Z',
@@ -182,7 +185,7 @@ test('creating an overlapping slot returns 409', async () => {
 test('a tutor cannot edit another tutor\'s slot', async () => {
   const response = await request(app)
     .put('/api/slots/31')
-    .set('Authorization', `Bearer ${otherTutorToken}`)
+    .set(authenticatedRequest(8))
     .send({
       subject: 'Algebra',
       startTime: '2030-01-01T10:00:00.000Z',
@@ -196,7 +199,7 @@ test('a tutor cannot edit another tutor\'s slot', async () => {
 test('a tutor can remove their available slot', async () => {
   const response = await request(app)
     .delete('/api/slots/31')
-    .set('Authorization', `Bearer ${tutorToken}`);
+    .set(authenticatedRequest(7));
 
   assert.equal(response.status, 200);
   assert.equal(response.body.data.status, 'removed');

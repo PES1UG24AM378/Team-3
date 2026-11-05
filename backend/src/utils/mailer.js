@@ -2,20 +2,20 @@ const nodemailer = require('nodemailer');
 
 /**
  * Builds the email transporter.
- * If SMTP_HOST is configured in .env, real emails are sent through that server.
- * If not (as in local development/demo), emails are simply printed to the
- * console instead of being sent — this keeps the feature fully testable
- * without needing real email provider credentials (TUT-F-033 sibling rule:
- * secrets stay in environment configuration, never hardcoded).
+ * If SMTP_HOST is configured, real emails are sent.
+ * Otherwise, emails are simulated in development without exposing contents.
  */
 function createTransport() {
-   if (process.env.SMTP_HOST) {
+  if (process.env.SMTP_HOST) {
     return nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: Number(process.env.SMTP_PORT) || 587,
       secure: Number(process.env.SMTP_PORT) === 465,
       auth: process.env.SMTP_USER
-        ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD }
+        ? {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASSWORD
+          }
         : undefined,
       connectionTimeout: 5000,
       greetingTimeout: 5000,
@@ -24,11 +24,14 @@ function createTransport() {
   }
 
   return {
-    sendMail: async (mailOptions) => {
-      console.log('--- [DEV MODE] No SMTP_HOST configured, email not actually sent ---');
-      console.log('Email prepared in development mode (recipient/content not logged).');
-      console.log('--- end email ---');
-      return { messageId: `dev-${Date.now()}` };
+    sendMail: async () => {
+      console.log(
+        '[DEV MODE] Email simulated. SMTP_HOST is not configured.'
+      );
+
+      return {
+        messageId: `dev-${Date.now()}`
+      };
     }
   };
 }
@@ -36,15 +39,24 @@ function createTransport() {
 const transporter = createTransport();
 
 /**
- * Sends an email. Throws on failure so the caller (the reminder worker)
- * can catch it and apply retry/backoff logic (TUT-F-033).
+ * Sends an email. Throws on failure so the caller can retry.
  */
 async function sendEmail({ to, subject, text }) {
   if (!to) {
     throw new Error('Cannot send email: missing recipient address');
   }
-  const from = process.env.SMTP_FROM || 'Tutoring Scheduler <no-reply@tutoringscheduler.local>';
-  const info = await transporter.sendMail({ from, to, subject, text });
+
+  const from =
+    process.env.SMTP_FROM ||
+    'Tutoring Scheduler <no-reply@tutoringscheduler.local>';
+
+  const info = await transporter.sendMail({
+    from,
+    to,
+    subject,
+    text
+  });
+
   return info;
 }
 

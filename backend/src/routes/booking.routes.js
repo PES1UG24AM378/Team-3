@@ -9,10 +9,12 @@ const router = express.Router();
 function sanitizeComment(value) {
   if (value === undefined || value === null) return null;
   if (typeof value !== 'string') return undefined;
+
   const cleaned = value
     .replace(/<[^>]*>/g, '')
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
     .trim();
+
   return cleaned ? cleaned.slice(0, 2000) : null;
 }
 
@@ -31,19 +33,23 @@ router.post(
   async (req, res, next) => {
     try {
       const { slotId } = req.body;
-      const booking = await BookingModel.createAtomicBooking({ slotId, tuteeId: req.user.id });
 
-      // Schedule confirmation + reminder emails (TUT-F-025, TUT-F-030, TUT-F-031).
-      // Wrapped separately so a notification-scheduling issue never fails
-      // the booking itself.
+      const booking = await BookingModel.createAtomicBooking({
+        slotId,
+        tuteeId: req.user.id
+      });
+
+      // Schedule confirmation and reminder emails separately.
       try {
         const fullBooking = await BookingModel.findById(booking.id);
+
         await ReminderJobModel.scheduleForBooking({
           bookingId: booking.id,
           startTime: fullBooking.start_time
         });
       } catch (notifyErr) {
-        console.error('Failed to schedule booking notifications:', notifyErr);
+        // Avoid logging potentially sensitive booking or user information.
+        console.error('Failed to schedule booking notifications');
       }
 
       res.status(201).json({
@@ -73,14 +79,30 @@ router.get('/mine', authenticate, async (req, res, next) => {
  * @route PUT /api/bookings/:id/complete
  * @desc Mark a past session completed (the assigned tutor only)
  */
-router.put('/:id/complete', authenticate, validate({ params: { id: { required: true, type: 'number', min: 1 } } }), async (req, res, next) => {
-  try {
-    const booking = await BookingModel.completeByTutor(Number(req.params.id), req.user.id);
-    res.json({ message: 'Session marked completed', data: booking });
-  } catch (err) {
-    next(err);
+router.put(
+  '/:id/complete',
+  authenticate,
+  validate({
+    params: {
+      id: { required: true, type: 'number', min: 1 }
+    }
+  }),
+  async (req, res, next) => {
+    try {
+      const booking = await BookingModel.completeByTutor(
+        Number(req.params.id),
+        req.user.id
+      );
+
+      res.json({
+        message: 'Session marked completed',
+        data: booking
+      });
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
 /**
  * @route POST /api/bookings/:id/rating
@@ -89,29 +111,57 @@ router.put('/:id/complete', authenticate, validate({ params: { id: { required: t
 router.post(
   '/:id/rating',
   authenticate,
-  validate({ params: { id: { required: true, type: 'number', min: 1 } } }),
-  validate({ body: { rating: { required: true, type: 'number', min: 1, max: 5 } } }),
+  validate({
+    params: {
+      id: { required: true, type: 'number', min: 1 }
+    }
+  }),
+  validate({
+    body: {
+      rating: { required: true, type: 'number', min: 1, max: 5 }
+    }
+  }),
   async (req, res, next) => {
     try {
       const rating = Number(req.body.rating);
+
       if (!Number.isInteger(rating)) {
-        return next(new AppError('rating must be an integer from 1 to 5', 422, 'VALIDATION_ERROR'));
+        return next(
+          new AppError(
+            'rating must be an integer from 1 to 5',
+            422,
+            'VALIDATION_ERROR'
+          )
+        );
       }
+
       const comment = sanitizeComment(req.body.comment);
+
       if (comment === undefined) {
-        return next(new AppError('comment must be a string', 422, 'VALIDATION_ERROR'));
+        return next(
+          new AppError('comment must be a string', 422, 'VALIDATION_ERROR')
+        );
       }
+
       const booking = await BookingModel.findById(Number(req.params.id));
+
       if (!booking) {
-        return next(new AppError('Booking not found', 404, 'BOOKING_NOT_FOUND'));
+        return next(
+          new AppError('Booking not found', 404, 'BOOKING_NOT_FOUND')
+        );
       }
+
       const created = await RatingModel.create({
         bookingId: booking.id,
         tuteeId: req.user.id,
         rating,
         comment
       });
-      res.status(201).json({ message: 'Rating submitted', data: created });
+
+      res.status(201).json({
+        message: 'Rating submitted',
+        data: created
+      });
     } catch (err) {
       next(err);
     }
@@ -120,18 +170,55 @@ router.post(
 
 /**
  * @route GET /api/bookings/:id
- * @desc Retrieve booking details
+ * @desc Retrieve booking details (assigned tutor or tutee only)
  */
-router.get('/:id', async (req, res, next) => {
-  try {
-    const booking = await BookingModel.findById(req.params.id);
-    if (!booking) {
-      return next(new AppError('Booking not found', 404, 'BOOKING_NOT_FOUND'));
+router.get(
+  '/:id',
+  authenticate,
+  validate({
+    params: {
+      id: { required: true, type: 'number', min: 1 }
     }
-    res.json({ data: booking });
-  } catch (err) {
-    next(err);
+  }),
+  async (req, res, next) => {
+    try {
+      const bookingId = Number(req.params.id);
+
+      if (!Number.isSafeInteger(bookingId)) {
+        return next(
+          new AppError('Invalid booking ID', 422, 'VALIDATION_ERROR')
+        );
+      }
+
+      const booking = await BookingModel.findById(bookingId);
+
+      if (!booking) {
+        return next(
+          new AppError('Booking not found', 404, 'BOOKING_NOT_FOUND')
+        );
+      }
+
+      const isTutor =
+        Number(booking.tutor_id) === Number(req.user.id);
+
+      const isTutee =
+        Number(booking.tutee_id) === Number(req.user.id);
+
+      if (!isTutor && !isTutee) {
+        return next(
+          new AppError(
+            'You are not authorized to view this booking',
+            403,
+            'FORBIDDEN'
+          )
+        );
+      }
+
+      res.json({ data: booking });
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
 module.exports = router;

@@ -2,6 +2,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert');
 const http = require('http');
 const app = require('../src/app');
+const { UserModel } = require('../src/models');
+const { signToken } = require('../src/middleware/auth');
 
 let server;
 let baseUrl;
@@ -44,6 +46,40 @@ test('GET /api/nonexistent-route should return unified 404 error format', async 
   assert.ok(data.error);
   assert.strictEqual(data.error.code, 'NOT_FOUND');
   assert.ok(data.error.timestamp);
+});
+
+test('POST /api/slots with missing fields should return 422 with validation errors', async () => {
+  const originalFindById = UserModel.findById;
+
+  UserModel.findById = async (id) => ({
+    id: Number(id),
+    is_verified: true,
+    role: 'tutor'
+  });
+
+  const token = signToken({
+    sub: '1',
+    exp: Math.floor(Date.now() / 1000) + 3600
+  });
+
+  try {
+    const res = await fetch(`${baseUrl}/api/slots`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({})
+    });
+
+    assert.strictEqual(res.status, 422);
+
+    const data = await res.json();
+    assert.strictEqual(data.error.code, 'VALIDATION_ERROR');
+    assert.ok(Array.isArray(data.error.details));
+  } finally {
+    UserModel.findById = originalFindById;
+  }
 });
 
 test('POST /api/slots requires authentication before validating the request body', async () => {

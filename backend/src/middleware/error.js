@@ -11,19 +11,27 @@ class AppError extends Error {
 
 /**
  * Standard error response middleware
- * Produces unified JSON shape: { error: { code, message, details, timestamp } }
+ * Produces unified JSON shape:
+ * { error: { code, message, details, timestamp } }
  */
 function errorHandler(err, req, res, next) {
   const statusCode = err.statusCode || 500;
+
   const response = {
     error: {
-      code: err.code || (statusCode >= 500 ? 'INTERNAL_SERVER_ERROR' : 'BAD_REQUEST'),
-      message: err.message || 'An unexpected error occurred',
+      code: err.code || (
+        statusCode >= 500
+          ? 'INTERNAL_SERVER_ERROR'
+          : 'BAD_REQUEST'
+      ),
+      message: statusCode >= 500
+        ? 'An unexpected error occurred'
+        : (err.message || 'An unexpected error occurred'),
       timestamp: new Date().toISOString()
     }
   };
 
-  if (err.details) {
+  if (statusCode < 500 && err.details) {
     response.error.details = err.details;
   }
 
@@ -32,11 +40,8 @@ function errorHandler(err, req, res, next) {
   }
 
   if (statusCode >= 500) {
-  console.error(
-    `[ERROR] ${req.method} ${req.path}: ${err.code || 'INTERNAL_SERVER_ERROR'}`
-  );
-}
-  
+    console.error(`[ERROR] ${req.method} ${req.path} - ${statusCode}`);
+  }
 
   res.status(statusCode).json(response);
 }

@@ -5,10 +5,18 @@ const request = require('supertest');
 const app = require('../src/app');
 const config = require('../src/config');
 const db = require('../src/db');
-const { UserModel, BookingModel, ReminderJobModel } = require('../src/models');
+const {
+  UserModel,
+  BookingModel,
+  ReminderJobModel
+} = require('../src/models');
 const { signToken } = require('../src/middleware/auth');
 
-const hasDatabaseUrl = Boolean(config.db.connectionString || process.env.RUN_DB_INTEGRATION_TESTS === 'true');
+const hasDatabaseUrl = Boolean(
+  config.db.connectionString ||
+  process.env.RUN_DB_INTEGRATION_TESTS === 'true'
+);
+
 const originals = {
   findById: UserModel.findById,
   getClient: db.getClient,
@@ -22,17 +30,31 @@ let transactionStatements;
 
 function tokenFor(userId) {
   const now = Math.floor(Date.now() / 1000);
-  return signToken({ sub: userId, iat: now, exp: now + 60 });
+
+  return signToken({
+    sub: String(userId),
+    iat: now,
+    exp: now + 60
+  });
 }
 
 function mockClient() {
   return {
     async query(sql, params = []) {
       transactionStatements.push(sql.trim());
-      if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql.trim())) return { rows: [], rowCount: 0 };
+
+      if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql.trim())) {
+        return { rows: [], rowCount: 0 };
+      }
 
       if (sql.includes('SELECT id, tutor_id, status, start_time, end_time')) {
-        return { rows: slot && Number(params[0]) === slot.id ? [{ ...slot }] : [], rowCount: slot ? 1 : 0 };
+        return {
+          rows:
+            slot && Number(params[0]) === slot.id
+              ? [{ ...slot }]
+              : [],
+          rowCount: slot ? 1 : 0
+        };
       }
 
       if (sql.includes('UPDATE availability_slots')) {
@@ -48,12 +70,18 @@ function mockClient() {
           tutee_id: params[2],
           status: 'confirmed'
         };
+
         bookedRows.push(booking);
-        return { rows: [booking], rowCount: 1 };
+
+        return {
+          rows: [booking],
+          rowCount: 1
+        };
       }
 
       throw new Error(`Unexpected test query: ${sql}`);
     },
+
     release() {}
   };
 }
@@ -66,11 +94,28 @@ beforeEach(() => {
     start_time: '2030-01-01T10:00:00.000Z',
     end_time: '2030-01-01T11:00:00.000Z'
   };
+
   bookedRows = [];
   transactionStatements = [];
-  UserModel.findById = async (id) => ({ id, name: `User ${id}`, is_verified: true });
+
+  UserModel.findById = async (id) => ({
+    id: Number(id),
+    name: `User ${id}`,
+    is_verified: true
+  });
+
   db.getClient = async () => mockClient();
-  BookingModel.findById = async (id) => ({ ...bookedRows.find((booking) => booking.id === id), start_time: slot.start_time });
+
+  BookingModel.findById = async (id) => {
+    const booking = bookedRows.find(
+      (item) => item.id === Number(id)
+    );
+
+    return booking
+      ? { ...booking, start_time: slot.start_time }
+      : null;
+  };
+
   ReminderJobModel.scheduleForBooking = async () => [];
 });
 
@@ -159,74 +204,200 @@ test('booking requires a slot ID', async () => {
   assert.equal(response.body.error.code, 'VALIDATION_ERROR');
 });
 
-test('two authenticated users cannot book the same slot concurrently in PostgreSQL', {
-  skip: !hasDatabaseUrl && 'Set DATABASE_URL or RUN_DB_INTEGRATION_TESTS=true to run this PostgreSQL integration test'
-}, async () => {
-  // Use a real PostgreSQL client for this integration test.
-  db.getClient = originals.getClient;
+test(
+  'two authenticated users cannot book the same slot concurrently in PostgreSQL',
+  {
+    skip:
+      !hasDatabaseUrl &&
+      'Set DATABASE_URL or RUN_DB_INTEGRATION_TESTS=true to run this PostgreSQL integration test'
+  },
+  async () => {
+    // Use a real PostgreSQL client for this integration test.
+    db.getClient = originals.getClient;
 
-  const suffix = crypto.randomUUID();
-  const emails = [`booking-tutor-${suffix}@test.invalid`, `booking-tutee-a-${suffix}@test.invalid`, `booking-tutee-b-${suffix}@test.invalid`];
-  const userIds = [];
-  let slotId;
+    const suffix = crypto.randomUUID();
 
-  try {
-    const tutorResult = await db.query(
-      `INSERT INTO users (name, email, password_hash, role, is_verified)
-       VALUES ('Integration Tutor', $1, 'unused', 'tutor', TRUE) RETURNING id`,
-      [emails[0]]
-    );
-    userIds.push(tutorResult.rows[0].id);
+    const emails = [
+      `booking-tutor-${suffix}@test.invalid`,
+      `booking-tutee-a-${suffix}@test.invalid`,
+      `booking-tutee-b-${suffix}@test.invalid`
+    ];
 
-    for (const email of emails.slice(1)) {
-      const result = await db.query(
+    const userIds = [];
+    let slotId;
+
+    try {
+      const tutorResult = await db.query(
         `INSERT INTO users (name, email, password_hash, role, is_verified)
-         VALUES ('Integration Tutee', $1, 'unused', 'tutee', TRUE) RETURNING id`,
-        [email]
+         VALUES ('Integration Tutor', $1, 'unused', 'tutor', TRUE) RETURNING id`,
+        [emails[0]]
       );
-      userIds.push(result.rows[0].id);
-    }
 
-    const startTime = new Date(Date.now() + 48 * 60 * 60 * 1000);
-    const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
-    const slotResult = await db.query(
-      `INSERT INTO availability_slots (tutor_id, subject, start_time, end_time, duration_minutes)
-       VALUES ($1, 'Integration Test', $2, $3, 60) RETURNING id`,
-      [userIds[0], startTime.toISOString(), endTime.toISOString()]
-    );
-    slotId = slotResult.rows[0].id;
+      userIds.push(tutorResult.rows[0].id);
 
-    const responses = await Promise.all([
-      request(app)
-        .post('/api/bookings')
-        .set('Authorization', `Bearer ${tokenFor(userIds[1])}`)
-        .send({ slotId }),
-      request(app)
-        .post('/api/bookings')
-        .set('Authorization', `Bearer ${tokenFor(userIds[2])}`)
-        .send({ slotId })
-    ]);
+      for (const email of emails.slice(1)) {
+        const result = await db.query(
+          `INSERT INTO users (name, email, password_hash, role, is_verified)
+           VALUES ('Integration Tutee', $1, 'unused', 'tutee', TRUE) RETURNING id`,
+          [email]
+        );
 
-    assert.deepEqual(responses.map((response) => response.status).sort(), [201, 409]);
-    const conflict = responses.find((response) => response.status === 409);
-    assert.equal(conflict.body.error.code, 'SLOT_ALREADY_BOOKED');
+        userIds.push(result.rows[0].id);
+      }
 
-    const bookingRows = await db.query('SELECT id FROM bookings WHERE slot_id = $1', [slotId]);
-    const savedSlot = await db.query('SELECT status FROM availability_slots WHERE id = $1', [slotId]);
-    assert.equal(bookingRows.rowCount, 1);
-    assert.equal(savedSlot.rows[0].status, 'booked');
-  } finally {
-    if (slotId) {
-      await db.query('DELETE FROM reminder_jobs WHERE booking_id IN (SELECT id FROM bookings WHERE slot_id = $1)', [slotId]);
-      await db.query('DELETE FROM bookings WHERE slot_id = $1', [slotId]);
-      await db.query('DELETE FROM availability_slots WHERE id = $1', [slotId]);
-    }
-    if (userIds.length) {
-      await db.query('DELETE FROM users WHERE id = ANY($1::int[])', [userIds]);
+      const startTime = new Date(Date.now() + 48 * 60 * 60 * 1000);
+      const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
+
+      const slotResult = await db.query(
+        `INSERT INTO availability_slots
+          (tutor_id, subject, start_time, end_time, duration_minutes)
+         VALUES ($1, 'Integration Test', $2, $3, 60)
+         RETURNING id`,
+        [userIds[0], startTime.toISOString(), endTime.toISOString()]
+      );
+
+      slotId = slotResult.rows[0].id;
+
+      const responses = await Promise.all([
+        request(app)
+          .post('/api/bookings')
+          .set('Authorization', `Bearer ${tokenFor(userIds[1])}`)
+          .send({ slotId }),
+
+        request(app)
+          .post('/api/bookings')
+          .set('Authorization', `Bearer ${tokenFor(userIds[2])}`)
+          .send({ slotId })
+      ]);
+
+      assert.deepEqual(
+        responses.map((response) => response.status).sort(),
+        [201, 409]
+      );
+
+      const conflict = responses.find(
+        (response) => response.status === 409
+      );
+
+      assert.equal(conflict.body.error.code, 'SLOT_ALREADY_BOOKED');
+
+      const bookingRows = await db.query(
+        'SELECT id FROM bookings WHERE slot_id = $1',
+        [slotId]
+      );
+
+      const savedSlot = await db.query(
+        'SELECT status FROM availability_slots WHERE id = $1',
+        [slotId]
+      );
+
+      assert.equal(bookingRows.rowCount, 1);
+      assert.equal(savedSlot.rows[0].status, 'booked');
+    } finally {
+      if (slotId) {
+        await db.query(
+          `DELETE FROM reminder_jobs
+           WHERE booking_id IN (
+             SELECT id FROM bookings WHERE slot_id = $1
+           )`,
+          [slotId]
+        );
+
+        await db.query(
+          'DELETE FROM bookings WHERE slot_id = $1',
+          [slotId]
+        );
+
+        await db.query(
+          'DELETE FROM availability_slots WHERE id = $1',
+          [slotId]
+        );
+      }
+
+      if (userIds.length) {
+        await db.query(
+          'DELETE FROM users WHERE id = ANY($1::int[])',
+          [userIds]
+        );
+      }
     }
   }
+);
+
+// Booking detail authorization tests
+
+const bookingDetails = {
+  id: 51,
+  tutor_id: 10,
+  tutee_id: 20,
+  status: 'confirmed',
+  tutor_email: 'tutor@example.com',
+  tutee_email: 'student@example.com'
+};
+
+test('booking details require authentication', async () => {
+  const response = await request(app)
+    .get('/api/bookings/51');
+
+  assert.equal(response.status, 401);
+  assert.equal(response.body.error.code, 'AUTHENTICATION_REQUIRED');
+});
+
+test('booking details reject an invalid booking ID', async () => {
+  const response = await request(app)
+    .get('/api/bookings/invalid')
+    .set('Authorization', `Bearer ${tokenFor(10)}`);
+
+  assert.equal(response.status, 422);
+  assert.equal(response.body.error.code, 'VALIDATION_ERROR');
+});
+
+test('assigned tutor can view booking details', async () => {
+  BookingModel.findById = async () => bookingDetails;
+
+  const response = await request(app)
+    .get('/api/bookings/51')
+    .set('Authorization', `Bearer ${tokenFor(10)}`);
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.data.id, 51);
+});
+
+test('assigned tutee can view booking details', async () => {
+  BookingModel.findById = async () => bookingDetails;
+
+  const response = await request(app)
+    .get('/api/bookings/51')
+    .set('Authorization', `Bearer ${tokenFor(20)}`);
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.data.id, 51);
+});
+
+test('unrelated user cannot view booking details', async () => {
+  BookingModel.findById = async () => bookingDetails;
+
+  const response = await request(app)
+    .get('/api/bookings/51')
+    .set('Authorization', `Bearer ${tokenFor(99)}`);
+
+  assert.equal(response.status, 403);
+  assert.equal(response.body.error.code, 'FORBIDDEN');
+});
+
+test('booking details return 404 when booking does not exist', async () => {
+  BookingModel.findById = async () => null;
+
+  const response = await request(app)
+    .get('/api/bookings/999')
+    .set('Authorization', `Bearer ${tokenFor(10)}`);
+
+  assert.equal(response.status, 404);
+  assert.equal(response.body.error.code, 'BOOKING_NOT_FOUND');
 });
 
 after(async () => {
-  if (hasDatabaseUrl || config.db.connectionString) await db.closePool();
+  if (hasDatabaseUrl || config.db.connectionString) {
+    await db.closePool();
+  }
 });
