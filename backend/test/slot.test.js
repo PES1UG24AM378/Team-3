@@ -1,7 +1,9 @@
+
 const { test, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const request = require('supertest');
 const app = require('../src/app');
+const db = require('../src/db');
 const { AvailabilitySlotModel, UserModel } = require('../src/models');
 const { signToken } = require('../src/middleware/auth');
 
@@ -48,7 +50,8 @@ beforeEach(() => {
         name: 'Test Tutor',
         email: 'tutor7@example.com',
         role: 'tutor',
-        is_verified: true
+        is_verified: true,
+        is_suspended: false
       };
     }
 
@@ -58,7 +61,19 @@ beforeEach(() => {
         name: 'Other Tutor',
         email: 'tutor8@example.com',
         role: 'tutor',
-        is_verified: true
+        is_verified: true,
+        is_suspended: false
+      };
+    }
+
+    if (userId === 9) {
+      return {
+        id: 9,
+        name: 'Test Admin',
+        email: 'admin@example.com',
+        role: 'admin',
+        is_verified: true,
+        is_suspended: false
       };
     }
 
@@ -203,4 +218,62 @@ test('a tutor can remove their available slot', async () => {
 
   assert.equal(response.status, 200);
   assert.equal(response.body.data.status, 'removed');
+});
+
+test('an administrator can remove another tutor\'s listing', async () => {
+  let updatedSlot;
+
+  AvailabilitySlotModel.updateStatus = async (id, status) => {
+    updatedSlot = { id, status };
+    return updatedSlot;
+  };
+
+  const response = await request(app)
+    .delete('/api/admin/slots/31')
+    .set(authenticatedRequest(9));
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.slotId, 31);
+  assert.equal(updatedSlot.status, 'removed');
+});
+
+test('a non-admin cannot access the admin listing removal endpoint', async () => {
+  const response = await request(app)
+    .delete('/api/admin/slots/31')
+    .set(authenticatedRequest(7));
+
+  assert.equal(response.status, 403);
+  assert.equal(response.body.error.code, 'ADMIN_ACCESS_REQUIRED');
+});
+
+test('admin listing removal requires authentication', async () => {
+  const response = await request(app)
+    .delete('/api/admin/slots/31');
+
+  assert.equal(response.status, 401);
+  assert.equal(response.body.error.code, 'AUTHENTICATION_REQUIRED');
+});
+
+test('slot search SQL excludes listings from suspended tutors', async () => {
+  // Restore the real model method because beforeEach replaces it with a mock.
+  AvailabilitySlotModel.search = originals.search;
+
+  const originalQuery = db.query;
+  let capturedQuery;
+
+  db.query = async (queryText, params) => {
+    capturedQuery = queryText;
+    return { rows: [] };
+  };
+
+  try {
+    await AvailabilitySlotModel.search({});
+
+    assert.match(
+      capturedQuery,
+      /u\.is_suspended\s*=\s*FALSE/i
+    );
+  } finally {
+    db.query = originalQuery;
+  }
 });

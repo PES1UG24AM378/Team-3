@@ -1,9 +1,10 @@
+
 const db = require('../db');
 
 const UserModel = {
   async findById(id) {
     const res = await db.query(
-      `SELECT id, name, email, role, is_verified, created_at, updated_at
+      `SELECT id, name, email, role, is_verified, is_suspended, created_at, updated_at
        FROM users
        WHERE id = $1`,
       [id]
@@ -14,7 +15,7 @@ const UserModel = {
 
   async findByEmail(email) {
     const res = await db.query(
-      `SELECT id, name, email, role, is_verified, password_hash
+      `SELECT id, name, email, role, is_verified, is_suspended, password_hash
        FROM users
        WHERE email = $1`,
       [email.toLowerCase().trim()]
@@ -41,7 +42,7 @@ const UserModel = {
         verification_token
       )
       VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING id, name, email, role, is_verified, created_at, updated_at`,
+      RETURNING id, name, email, role, is_verified, is_suspended, created_at, updated_at`,
       [
         name,
         email.toLowerCase().trim(),
@@ -62,11 +63,24 @@ const UserModel = {
            verification_token = NULL,
            updated_at = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
        WHERE id = $1
-       RETURNING id, name, email, role, is_verified`,
+       RETURNING id, name, email, role, is_verified, is_suspended`,
       [id]
     );
 
     return res.rows[0];
+  },
+
+  async setSuspended(id, isSuspended) {
+    const res = await db.query(
+      `UPDATE users
+       SET is_suspended = $2,
+           updated_at = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
+       WHERE id = $1
+       RETURNING id, name, email, role, is_suspended`,
+      [id, isSuspended]
+    );
+
+    return res.rows[0] || null;
   }
 };
 
