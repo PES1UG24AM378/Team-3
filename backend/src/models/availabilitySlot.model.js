@@ -1,3 +1,4 @@
+
 const db = require('../db');
 
 const AvailabilitySlotModel = {
@@ -15,7 +16,7 @@ const AvailabilitySlotModel = {
 
   async create({ tutorId, subject, startTimeUtc, endTimeUtc, durationMinutes, isRecurring = false, recurrencePattern = null }) {
     const res = await db.query(
-      `INSERT INTO availability_slots 
+      `INSERT INTO availability_slots
        (tutor_id, subject, start_time, end_time, duration_minutes, status, is_recurring, recurrence_pattern)
        VALUES ($1, $2, $3, $4, $5, 'available', $6, $7)
        RETURNING *`,
@@ -53,7 +54,9 @@ const AvailabilitySlotModel = {
       LEFT JOIN tutor_profiles tp ON tp.user_id = u.id
       WHERE s.status = 'available'
         AND s.start_time > CURRENT_TIMESTAMP
+        AND u.is_suspended = FALSE
     `;
+
     const params = [];
 
     if (subject) {
@@ -85,15 +88,18 @@ const AvailabilitySlotModel = {
   async checkOverlap(tutorId, startTimeUtc, endTimeUtc, excludeSlotId = null) {
     let queryText = `
       SELECT id FROM availability_slots
-      WHERE tutor_id = $1 
+      WHERE tutor_id = $1
         AND status IN ('available', 'booked')
         AND (start_time < $3 AND end_time > $2)
     `;
+
     const params = [tutorId, startTimeUtc, endTimeUtc];
+
     if (excludeSlotId) {
       params.push(excludeSlotId);
       queryText += ` AND id <> $4`;
     }
+
     const res = await db.query(queryText, params);
     return res.rows.length > 0;
   },
