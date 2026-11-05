@@ -42,4 +42,11 @@ async function authenticate(req, res, next) {
   }
 }
 
-module.exports = { authenticate, signToken };
+function requireAdmin(req, res, next) {
+  if (!req.user || req.user.role !== 'admin') {
+    return next(new AppError('Admin access required', 403, 'ADMIN_ACCESS_REQUIRED'));
+  }
+  next();
+}
+
+module.exports = { authenticate, signToken, requireAdmin };

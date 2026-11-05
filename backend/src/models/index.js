@@ -4,6 +4,7 @@ const AvailabilitySlotModel = require('./availabilitySlot.model');
 const BookingModel = require('./booking.model');
 const RatingModel = require('./rating.model');
 const ReminderJobModel = require('./reminderJob.model');
+const DataCleanupModel = require('./dataCleanup.model');
 
 module.exports = {
   UserModel,
@@ -11,5 +12,6 @@ module.exports = {
   AvailabilitySlotModel,
   BookingModel,
   RatingModel,
-  ReminderJobModel
+  ReminderJobModel,
+  DataCleanupModel
 };
