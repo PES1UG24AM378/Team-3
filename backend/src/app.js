@@ -8,6 +8,7 @@ const slotRoutes = require('./routes/slot.routes');
 const bookingRoutes = require('./routes/booking.routes');
 const profileRoutes = require('./routes/profile.routes');
 const authRoutes = require('./routes/auth.routes');
+const adminRoutes = require('./routes/admin.routes');
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use(`${config.apiPrefix}/auth/login`, authRoutes);
 app.use(`${config.apiPrefix}/slots`, slotRoutes);
 app.use(`${config.apiPrefix}/bookings`, bookingRoutes);
 app.use(`${config.apiPrefix}/profile`, profileRoutes);
+app.use(`${config.apiPrefix}/admin`, adminRoutes);
 
 // 404 Handler for undefined routes
 app.use((req, res, next) => {
