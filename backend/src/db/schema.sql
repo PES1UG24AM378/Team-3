@@ -1,3 +1,4 @@
+
 -- PostgreSQL Schema for Peer-to-Peer Tutoring Scheduler (Team 3)
 -- SRS Reference: Section 7.4 Data Model / ER Diagram & SAD Section 3.7
 -- All timestamps are stored in UTC (TIMESTAMP WITH TIME ZONE)
@@ -8,12 +9,18 @@ CREATE TABLE IF NOT EXISTS users (
     name VARCHAR(120) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
-    role VARCHAR(30) NOT NULL DEFAULT 'student' CHECK (role IN ('student', 'tutor', 'tutee', 'admin')),
+    role VARCHAR(30) NOT NULL DEFAULT 'student'
+        CHECK (role IN ('student', 'tutor', 'tutee', 'admin')),
     is_verified BOOLEAN NOT NULL DEFAULT FALSE,
+    is_suspended BOOLEAN NOT NULL DEFAULT FALSE,
     verification_token VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
 );
+
+-- Upgrade existing databases safely
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- 2. Tutor Profiles Table
 CREATE TABLE IF NOT EXISTS tutor_profiles (
@@ -38,7 +45,8 @@ CREATE TABLE IF NOT EXISTS availability_slots (
     start_time TIMESTAMP WITH TIME ZONE NOT NULL,
     end_time TIMESTAMP WITH TIME ZONE NOT NULL,
     duration_minutes INTEGER NOT NULL,
-    status VARCHAR(30) NOT NULL DEFAULT 'available' CHECK (status IN ('available', 'booked', 'completed', 'removed')),
+    status VARCHAR(30) NOT NULL DEFAULT 'available'
+        CHECK (status IN ('available', 'booked', 'completed', 'removed')),
     is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
     recurrence_pattern VARCHAR(50),
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
@@ -53,7 +61,8 @@ CREATE TABLE IF NOT EXISTS bookings (
     slot_id INTEGER NOT NULL UNIQUE REFERENCES availability_slots(id) ON DELETE RESTRICT,
     tutor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     tutee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    status VARCHAR(30) NOT NULL DEFAULT 'confirmed' CHECK (status IN ('pending', 'confirmed', 'completed', 'cancelled', 'rescheduled')),
+    status VARCHAR(30) NOT NULL DEFAULT 'confirmed'
+        CHECK (status IN ('pending', 'confirmed', 'completed', 'cancelled', 'rescheduled')),
     cancellation_reason TEXT,
     cancelled_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
     cancelled_at TIMESTAMP WITH TIME ZONE,
@@ -79,9 +88,11 @@ CREATE TABLE IF NOT EXISTS ratings (
 CREATE TABLE IF NOT EXISTS reminder_jobs (
     id SERIAL PRIMARY KEY,
     booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
-       reminder_type VARCHAR(20) NOT NULL CHECK (reminder_type IN ('confirmation', '24h', '1h')),
+    reminder_type VARCHAR(20) NOT NULL
+        CHECK (reminder_type IN ('confirmation', '24h', '1h')),
     scheduled_for TIMESTAMP WITH TIME ZONE NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed', 'cancelled')),
+    status VARCHAR(20) NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'sent', 'failed', 'cancelled')),
     retry_count INTEGER NOT NULL DEFAULT 0,
     sent_at TIMESTAMP WITH TIME ZONE,
     last_error TEXT,
@@ -96,3 +107,4 @@ CREATE INDEX IF NOT EXISTS idx_slots_tutor ON availability_slots (tutor_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_tutee ON bookings (tutee_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_tutor ON bookings (tutor_id);
 CREATE INDEX IF NOT EXISTS idx_reminder_status ON reminder_jobs (status, scheduled_for);
+CREATE INDEX IF NOT EXISTS idx_users_suspended ON users (is_suspended);

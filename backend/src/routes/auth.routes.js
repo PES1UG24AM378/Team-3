@@ -1,3 +1,4 @@
+
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { UserModel } = require('../models');
@@ -15,15 +16,37 @@ router.post('/', validate({
 }), async (req, res, next) => {
   try {
     const user = await UserModel.findByEmail(req.body.email);
-    const passwordMatches = user && await bcrypt.compare(req.body.password, user.password_hash);
+
+    const passwordMatches =
+      user && await bcrypt.compare(req.body.password, user.password_hash);
+
     if (!passwordMatches || !user.is_verified) {
-      return next(new AppError('Invalid email or password', 401, 'INVALID_CREDENTIALS'));
+      return next(
+        new AppError('Invalid email or password', 401, 'INVALID_CREDENTIALS')
+      );
     }
+
+    if (user.is_suspended) {
+      return next(
+        new AppError('Your account has been suspended', 403, 'ACCOUNT_SUSPENDED')
+      );
+    }
+
     const now = Math.floor(Date.now() / 1000);
+
     res.json({
       data: {
-        token: signToken({ sub: user.id, iat: now, exp: now + 7 * 24 * 60 * 60 }),
-        user: { id: user.id, name: user.name, email: user.email, role: user.role }
+        token: signToken({
+          sub: user.id,
+          iat: now,
+          exp: now + 7 * 24 * 60 * 60
+        }),
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role
+        }
       }
     });
   } catch (err) {
