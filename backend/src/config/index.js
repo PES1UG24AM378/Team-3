@@ -34,6 +34,10 @@ const config = {
   business: {
     minCancellationNoticeHours: parseInt(process.env.MIN_CANCELLATION_NOTICE_HOURS, 10) || 2,
     timezone: process.env.TIMEZONE || 'UTC'
+  },
+  dataRetention: {
+    retentionDays: parseInt(process.env.DATA_RETENTION_DAYS, 10) || 90,
+    cleanupPollIntervalMs: parseInt(process.env.CLEANUP_POLL_INTERVAL_MS, 10) || 24 * 60 * 60 * 1000
   }
 };
 

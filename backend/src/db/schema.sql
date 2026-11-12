@@ -1,4 +1,3 @@
-
 -- PostgreSQL Schema for Peer-to-Peer Tutoring Scheduler (Team 3)
 -- SRS Reference: Section 7.4 Data Model / ER Diagram & SAD Section 3.7
 -- All timestamps are stored in UTC (TIMESTAMP WITH TIME ZONE)
@@ -14,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
     is_verified BOOLEAN NOT NULL DEFAULT FALSE,
     is_suspended BOOLEAN NOT NULL DEFAULT FALSE,
     verification_token VARCHAR(255),
+    deleted_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
 );
@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS users (
 -- Upgrade existing databases safely
 ALTER TABLE users
 ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;
 
 -- 2. Tutor Profiles Table
 CREATE TABLE IF NOT EXISTS tutor_profiles (
@@ -100,6 +102,16 @@ CREATE TABLE IF NOT EXISTS reminder_jobs (
     CONSTRAINT unique_booking_reminder UNIQUE (booking_id, reminder_type)
 );
 
+-- 7. Data Cleanup Runs Table (SRS PRJ-SR-006)
+-- Records aggregate cleanup activity only -- never personal data from the purged accounts
+CREATE TABLE IF NOT EXISTS data_cleanup_runs (
+    id SERIAL PRIMARY KEY,
+    run_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
+    retention_days INTEGER NOT NULL,
+    purged_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
+);
+
 -- Useful indexes for search and performance (TUT-NF-001, SAD Section 3.8)
 CREATE INDEX IF NOT EXISTS idx_slots_subject_start ON availability_slots (subject, start_time);
 CREATE INDEX IF NOT EXISTS idx_slots_status ON availability_slots (status);
@@ -107,4 +119,5 @@ CREATE INDEX IF NOT EXISTS idx_slots_tutor ON availability_slots (tutor_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_tutee ON bookings (tutee_id);
 CREATE INDEX IF NOT EXISTS idx_bookings_tutor ON bookings (tutor_id);
 CREATE INDEX IF NOT EXISTS idx_reminder_status ON reminder_jobs (status, scheduled_for);
+CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users (deleted_at);
 CREATE INDEX IF NOT EXISTS idx_users_suspended ON users (is_suspended);

@@ -80,6 +80,7 @@ The templates contain local development values only. Review and adjust `backend/
 | `JWT_EXPIRES_IN`, `MIN_CANCELLATION_NOTICE_HOURS`, `TIMEZONE` | Optional | Defaults are `7d`, `2`, and `UTC`. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Optional | Configure an SMTP server for actual email delivery. Credentials are needed only if the SMTP service requires them. Without `SMTP_HOST`, the development mailer logs messages instead of sending them. |
 | `REMINDER_POLL_INTERVAL_MS`, `REMINDER_RETRY_BASE_MINUTES`, `REMINDER_MAX_RETRIES` | Optional | Reminder worker poll interval and retry settings. Defaults are 15000 ms, 1 minute, and 3 attempts. These settings belong in `backend/.env`. |
+| `DATA_RETENTION_DAYS`, `CLEANUP_POLL_INTERVAL_MS` | Optional | Data-retention cleanup worker settings (PRJ-SR-006, issue #39). `DATA_RETENTION_DAYS` defaults to 90 (the SRS example value) — **not yet confirmed as final with the team/instructor**; revisit before relying on it in production. `CLEANUP_POLL_INTERVAL_MS` defaults to 86400000 ms (24 hours). Both belong in `backend/.env`. |
 | `VITE_API_BASE_URL` | Not currently consumed by the frontend. | The template value is `/api`; the current app uses `/api` directly. |
 
 ### Transport Security

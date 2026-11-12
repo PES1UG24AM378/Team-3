@@ -1,6 +1,7 @@
 const app = require('./app');
 const config = require('./config');
 const { startReminderWorker, stopReminderWorker } = require('./services/reminderWorker');
+const { startDataCleanupWorker, stopDataCleanupWorker } = require('./services/dataCleanupWorker');
 
 const server = app.listen(config.port, () => {
   console.log(`====================================================`);
@@ -14,10 +15,15 @@ const server = app.listen(config.port, () => {
 // scheduled reminder emails (TUT-F-025, TUT-F-030 to TUT-F-034).
 startReminderWorker();
 
+// Starts the background worker that purges/anonymizes deleted-user data
+// past the configured retention window (PRJ-SR-006).
+startDataCleanupWorker();
+
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM signal received: closing HTTP server');
   stopReminderWorker();
+  stopDataCleanupWorker();
   server.close(() => {
     console.log('HTTP server closed');
   });
