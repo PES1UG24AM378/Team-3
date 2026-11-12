@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS users (
 -- Upgrade existing databases safely
 ALTER TABLE users
 ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;
 
 -- 2. Tutor Profiles Table
 CREATE TABLE IF NOT EXISTS tutor_profiles (
