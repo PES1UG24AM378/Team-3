@@ -221,4 +221,73 @@ router.get(
   }
 );
 
+/**
+ * @route PATCH /api/bookings/:id/cancel
+ * @desc Cancel a booking with 24-hour advance notice window (TUT-F-023)
+ */
+router.patch(
+  '/:id/cancel',
+  authenticate,
+  validate({
+    params: {
+      id: { required: true, type: 'number', min: 1 }
+    }
+  }),
+  async (req, res, next) => {
+    try {
+      const bookingId = Number(req.params.id);
+      const { reason } = req.body || {};
+
+      const cancelled = await BookingModel.cancelBooking({
+        bookingId,
+        userId: req.user.id,
+        reason
+      });
+
+      res.json({
+        message: 'Booking cancelled successfully',
+        data: cancelled
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * @route PATCH /api/bookings/:id/reschedule
+ * @desc Reschedule a booking to another slot with the same tutor (TUT-F-024)
+ */
+router.patch(
+  '/:id/reschedule',
+  authenticate,
+  validate({
+    params: {
+      id: { required: true, type: 'number', min: 1 }
+    },
+    body: {
+      newSlotId: { required: true, type: 'number', min: 1 }
+    }
+  }),
+  async (req, res, next) => {
+    try {
+      const bookingId = Number(req.params.id);
+      const { newSlotId } = req.body;
+
+      const rescheduled = await BookingModel.rescheduleBooking({
+        bookingId,
+        userId: req.user.id,
+        newSlotId
+      });
+
+      res.json({
+        message: 'Booking rescheduled successfully',
+        data: rescheduled
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 module.exports = router;

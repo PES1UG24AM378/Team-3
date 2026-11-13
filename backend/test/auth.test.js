@@ -11,6 +11,7 @@ const originals = {
   findByEmail: UserModel.findByEmail,
   findById: UserModel.findById,
   setSuspended: UserModel.setSuspended,
+  create: UserModel.create,
   compare: bcrypt.compare
 };
 
@@ -86,6 +87,7 @@ afterEach(() => {
   UserModel.findByEmail = originals.findByEmail;
   UserModel.findById = originals.findById;
   UserModel.setSuspended = originals.setSuspended;
+  UserModel.create = originals.create;
   bcrypt.compare = originals.compare;
 });
 
@@ -231,4 +233,66 @@ test('a suspended user cannot use an existing authentication token', async () =>
 
   assert.equal(response.status, 403);
   assert.equal(response.body.error.code, 'ACCOUNT_SUSPENDED');
+});
+
+test('registration creates a user and returns an authentication token', async () => {
+  UserModel.create = async ({ name, email, passwordHash, role }) => ({
+    id: 42,
+    name,
+    email,
+    role,
+    is_verified: true,
+    is_suspended: false
+  });
+
+  const response = await request(app)
+    .post('/api/auth/register')
+    .send({
+      name: 'New Student',
+      email: 'student.new@example.com',
+      password: 'strongPassword123',
+      role: 'student'
+    });
+
+  assert.equal(response.status, 201);
+  assert.equal(response.body.data.user.id, 42);
+  assert.equal(response.body.data.user.email, 'student.new@example.com');
+  assert.ok(response.body.data.token);
+});
+
+test('registration rejects a duplicate email', async () => {
+  const response = await request(app)
+    .post('/api/auth/register')
+    .send({
+      name: 'Duplicate Student',
+      email: 'tutor@example.com',
+      password: 'password123',
+      role: 'student'
+    });
+
+  assert.equal(response.status, 409);
+  assert.equal(response.body.error.code, 'EMAIL_ALREADY_EXISTS');
+});
+
+test('registration rejects a password under 8 characters', async () => {
+  const response = await request(app)
+    .post('/api/auth/register')
+    .send({
+      name: 'Short Password User',
+      email: 'short@example.com',
+      password: 'short',
+      role: 'student'
+    });
+
+  assert.equal(response.status, 422);
+  assert.equal(response.body.error.code, 'VALIDATION_ERROR');
+});
+
+test('forgot password endpoint accepts email and returns generic success', async () => {
+  const response = await request(app)
+    .post('/api/auth/forgot-password')
+    .send({ email: 'tutor@example.com' });
+
+  assert.equal(response.status, 200);
+  assert.ok(response.body.message);
 });

@@ -21,7 +21,9 @@ const originals = {
   findById: UserModel.findById,
   getClient: db.getClient,
   findBookingById: BookingModel.findById,
-  scheduleForBooking: ReminderJobModel.scheduleForBooking
+  scheduleForBooking: ReminderJobModel.scheduleForBooking,
+  cancelBooking: BookingModel.cancelBooking,
+  rescheduleBooking: BookingModel.rescheduleBooking
 };
 
 let slot;
@@ -123,6 +125,8 @@ afterEach(() => {
   UserModel.findById = originals.findById;
   db.getClient = originals.getClient;
   BookingModel.findById = originals.findBookingById;
+  BookingModel.cancelBooking = originals.cancelBooking;
+  BookingModel.rescheduleBooking = originals.rescheduleBooking;
   ReminderJobModel.scheduleForBooking = originals.scheduleForBooking;
 });
 
@@ -394,6 +398,78 @@ test('booking details return 404 when booking does not exist', async () => {
 
   assert.equal(response.status, 404);
   assert.equal(response.body.error.code, 'BOOKING_NOT_FOUND');
+});
+
+test('assigned tutee can cancel a booking with at least 24 hours notice', async () => {
+  BookingModel.cancelBooking = async ({ bookingId, userId }) => ({
+    id: bookingId,
+    status: 'cancelled',
+    tutee_id: userId
+  });
+
+  const response = await request(app)
+    .patch('/api/bookings/51/cancel')
+    .set('Authorization', `Bearer ${tokenFor(20)}`)
+    .send({ reason: 'Schedule conflict' });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.data.status, 'cancelled');
+});
+
+test('cancellation rejects late cancellations within notice window', async () => {
+  BookingModel.cancelBooking = async () => {
+    const err = new Error('Cancellations require at least 24 hours advance notice');
+    err.statusCode = 422;
+    err.code = 'LATE_CANCELLATION_DISALLOWED';
+    throw err;
+  };
+
+  const response = await request(app)
+    .patch('/api/bookings/51/cancel')
+    .set('Authorization', `Bearer ${tokenFor(20)}`);
+
+  assert.equal(response.status, 422);
+  assert.equal(response.body.error.code, 'LATE_CANCELLATION_DISALLOWED');
+});
+
+test('cancellation requires authentication', async () => {
+  const response = await request(app)
+    .patch('/api/bookings/51/cancel');
+
+  assert.equal(response.status, 401);
+});
+
+test('rescheduling successfully updates booking to target slot', async () => {
+  BookingModel.rescheduleBooking = async ({ bookingId, newSlotId }) => ({
+    id: bookingId,
+    slot_id: newSlotId,
+    status: 'confirmed'
+  });
+
+  const response = await request(app)
+    .patch('/api/bookings/51/reschedule')
+    .set('Authorization', `Bearer ${tokenFor(20)}`)
+    .send({ newSlotId: 88 });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.data.slot_id, 88);
+});
+
+test('rescheduling rejects slot with different tutor', async () => {
+  BookingModel.rescheduleBooking = async () => {
+    const err = new Error('Rescheduled session must be with the same tutor');
+    err.statusCode = 422;
+    err.code = 'DIFFERENT_TUTOR_DISALLOWED';
+    throw err;
+  };
+
+  const response = await request(app)
+    .patch('/api/bookings/51/reschedule')
+    .set('Authorization', `Bearer ${tokenFor(20)}`)
+    .send({ newSlotId: 99 });
+
+  assert.equal(response.status, 422);
+  assert.equal(response.body.error.code, 'DIFFERENT_TUTOR_DISALLOWED');
 });
 
 after(async () => {
