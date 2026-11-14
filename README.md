@@ -11,6 +11,25 @@ This repository contains the runnable shared foundation for Team 3's peer-to-pee
 
 The backend API is served under `/api`. Dates are stored and returned in UTC. Error responses use a common JSON envelope. Local environment templates are provided for development; never put real credentials or production secrets in those files or commit local `.env` files.
 
+## Project Demonstration Videos
+
+- 🎬 **Sprint 1 Working Product Demo:** [Watch Sprint 1 Demo](media/Sprint1%20Demo%20video.mp4) (Foundation, authentication, slot search, booking creation, and 24h cancellation)
+- 🎬 **Sprint 2 Working Product Demo:** [Watch Sprint 2 Demo](media/sprint2-demo.mp4) (Post-session ratings, tutor reviews, administrative moderation, data retention cleanup, and responsive UI)
+
+## Official Project Documentation & Reports
+
+- 📄 **SRS:** [Software Requirements Specification (IEEE 830)](SRS_Peer_to_Peer_Tutoring_Scheduler.docx)
+- 🏗️ **SAD:** [Software Architecture and Design (IEEE 1016/42010)](SAD_Peer_to_Peer_Tutoring_Scheduler.docx)
+- 📝 **Architecture Addendum & ADR-03:** [SAD Architecture Addendum](docs/SAD_ARCHITECTURE_ADDENDUM.md)
+- 🧪 **Test Plan:** [Software Test Plan (IEEE 829)](Test_Plan_Peer_to_Peer_Tutoring_Scheduler.docx)
+- 🏃 **Agile Backlog & Story Points:** [Agile Sprint Planning & Estimations](docs/AGILE_BACKLOG_AND_ESTIMATIONS.md)
+- 📊 **QA Reports:**
+  - [Unit Test Report (83 tests, 100% pass on runnable)](docs/unit-test-report.md)
+  - [Code Coverage Report (70.29% line, 72.94% function)](docs/code-coverage-report.md)
+  - [Branch Coverage Report (79.10% branch coverage)](docs/branch-coverage-report.md)
+  - [System Validation Report (End-to-End manual & integrated flows)](docs/system-validation-report.md)
+  - [Test Traceability & Sprint Evidence](docs/test-traceability-and-sprint-evidence.md)
+
 ## Repository layout
 
 ```text

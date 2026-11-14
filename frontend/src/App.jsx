@@ -5,18 +5,89 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastChecked, setLastChecked] = useState(null);
-  const [activeTab, setActiveTab] = useState('overview');
+
+  // Authentication & session state
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem('tutoring_auth_token') || '');
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('tutoring_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [showAuthModal, setShowAuthModal] = useState(() => !localStorage.getItem('tutoring_auth_token'));
+  const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
+  const [loginEmail, setLoginEmail] = useState('bob.tutee@university.edu');
+  const [loginPassword, setLoginPassword] = useState('bob-password');
+  const [regName, setRegName] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regRole, setRegRole] = useState('student');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authMessage, setAuthMessage] = useState(null);
+
+  // Slot search & filters
   const [filters, setFilters] = useState({ subject: '', from: '', to: '', minRating: '' });
   const [slots, setSlots] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState(null);
-  const [authToken, setAuthToken] = useState('');
+
+  // Available catalogs for discovery
+  const [allKnownSubjects, setAllKnownSubjects] = useState([
+    'Algorithms & Complexity',
+    'Calculus',
+    'Data Structures',
+    'Database Systems',
+    'Discrete Mathematics',
+    'Linear Algebra',
+    'Machine Learning',
+    'Physics'
+  ]);
+  const [allKnownDates, setAllKnownDates] = useState([]);
+
+  // Booking & Session management
   const [bookingSlotId, setBookingSlotId] = useState(null);
   const [bookingMessage, setBookingMessage] = useState(null);
   const [myBookings, setMyBookings] = useState([]);
   const [myBookingsLoading, setMyBookingsLoading] = useState(false);
   const [sessionMessage, setSessionMessage] = useState(null);
   const [ratingDrafts, setRatingDrafts] = useState({});
+
+  const updateAvailableCatalogs = (slotList) => {
+    if (!slotList || !slotList.length) return;
+    const subjects = new Set([
+      'Algorithms & Complexity',
+      'Calculus',
+      'Data Structures',
+      'Database Systems',
+      'Discrete Mathematics',
+      'Linear Algebra',
+      'Machine Learning',
+      'Physics'
+    ]);
+    slotList.forEach((s) => {
+      if (s.subject) subjects.add(s.subject);
+    });
+    setAllKnownSubjects(Array.from(subjects).sort());
+
+    const datesMap = new Map();
+    slotList.forEach((s) => {
+      if (s.start_time) {
+        const iso = s.start_time.slice(0, 10);
+        const d = new Date(s.start_time);
+        const label = d.toLocaleDateString(undefined, {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric'
+        });
+        const currentCount = datesMap.get(iso)?.count || 0;
+        datesMap.set(iso, { iso, label, count: currentCount + 1 });
+      }
+    });
+    setAllKnownDates(Array.from(datesMap.values()).sort((a, b) => a.iso.localeCompare(b.iso)));
+  };
 
   const fetchHealth = async () => {
     setLoading(true);
@@ -38,23 +109,36 @@ function App() {
     fetchHealth();
   }, []);
 
-  const searchSlots = async (event) => {
+  const searchSlots = async (event, customFilters = null) => {
     event?.preventDefault();
     setSearchLoading(true);
     setSearchError(null);
     setBookingMessage(null);
 
+    const activeFilters = customFilters || filters;
     const params = new URLSearchParams();
-    if (filters.subject.trim()) params.set('subject', filters.subject.trim());
-    if (filters.from) params.set('from', new Date(`${filters.from}T00:00:00`).toISOString());
-    if (filters.to) params.set('to', new Date(`${filters.to}T23:59:59.999`).toISOString());
-    if (filters.minRating) params.set('minRating', filters.minRating);
+    if (activeFilters.subject && activeFilters.subject.trim()) {
+      params.set('subject', activeFilters.subject.trim());
+    }
+    if (activeFilters.from) {
+      params.set('from', new Date(`${activeFilters.from}T00:00:00`).toISOString());
+    }
+    if (activeFilters.to) {
+      params.set('to', new Date(`${activeFilters.to}T23:59:59.999`).toISOString());
+    }
+    if (activeFilters.minRating) {
+      params.set('minRating', activeFilters.minRating);
+    }
 
     try {
       const response = await fetch(`/api/slots?${params.toString()}`);
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error?.message || 'Unable to search available slots');
-      setSlots(payload.data || []);
+      const data = payload.data || [];
+      setSlots(data);
+      if (!customFilters && !filters.subject && !filters.from && !filters.to && !filters.minRating) {
+        updateAvailableCatalogs(data);
+      }
     } catch (err) {
       setSearchError(err.message);
       setSlots([]);
@@ -63,22 +147,154 @@ function App() {
     }
   };
 
+  const handleSelectSubject = (subject) => {
+    const nextFilters = { ...filters, subject: filters.subject === subject ? '' : subject };
+    setFilters(nextFilters);
+    searchSlots(null, nextFilters);
+  };
+
+  const handleSelectDate = (isoDate) => {
+    const isCurrent = filters.from === isoDate && filters.to === isoDate;
+    const nextFilters = {
+      ...filters,
+      from: isCurrent ? '' : isoDate,
+      to: isCurrent ? '' : isoDate
+    };
+    setFilters(nextFilters);
+    searchSlots(null, nextFilters);
+  };
+
+  const handleClearFilters = () => {
+    const reset = { subject: '', from: '', to: '', minRating: '' };
+    setFilters(reset);
+    searchSlots(null, reset);
+  };
+
   useEffect(() => {
-    searchSlots();
+    fetch('/api/slots')
+      .then((res) => res.json())
+      .then((payload) => {
+        if (payload.data) {
+          updateAvailableCatalogs(payload.data);
+          setSlots(payload.data);
+        }
+      })
+      .catch(() => {
+        searchSlots();
+      });
   }, []);
 
-  const slotsByDate = useMemo(() => slots.reduce((groups, slot) => {
-    const date = new Date(slot.start_time).toLocaleDateString(undefined, {
-      weekday: 'short', month: 'short', day: 'numeric'
-    });
-    groups[date] = groups[date] || [];
-    groups[date].push(slot);
-    return groups;
-  }, {}), [slots]);
+  const loadMyBookings = async (token = authToken) => {
+    if (!token) return;
+    setMyBookingsLoading(true);
+    setSessionMessage(null);
+    try {
+      const response = await fetch('/api/bookings/mine', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error?.message || 'Unable to load sessions');
+      setMyBookings(payload.data || []);
+    } catch (err) {
+      setSessionMessage({ type: 'error', text: err.message });
+    } finally {
+      setMyBookingsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (authToken) {
+      loadMyBookings(authToken);
+    } else {
+      setMyBookings([]);
+    }
+  }, [authToken]);
+
+  const handleLogin = async (e) => {
+    e?.preventDefault();
+    setAuthLoading(true);
+    setAuthMessage(null);
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: loginEmail, password: loginPassword })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error?.message || 'Login failed');
+
+      const token = payload.data.token;
+      const user = payload.data.user;
+
+      setAuthToken(token);
+      setCurrentUser(user);
+      localStorage.setItem('tutoring_auth_token', token);
+      localStorage.setItem('tutoring_user', JSON.stringify(user));
+
+      setShowAuthModal(false);
+      setBookingMessage({ type: 'success', text: `Signed in as ${user.name} (${user.role})` });
+      await loadMyBookings(token);
+    } catch (err) {
+      setAuthMessage({ type: 'error', text: err.message });
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleRegister = async (e) => {
+    e?.preventDefault();
+    setAuthLoading(true);
+    setAuthMessage(null);
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: regName,
+          email: regEmail,
+          password: regPassword,
+          role: regRole
+        })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error?.message || 'Registration failed');
+
+      const token = payload.data.token;
+      const user = payload.data.user;
+
+      setAuthToken(token);
+      setCurrentUser(user);
+      localStorage.setItem('tutoring_auth_token', token);
+      localStorage.setItem('tutoring_user', JSON.stringify(user));
+
+      setShowAuthModal(false);
+      setBookingMessage({ type: 'success', text: `Account created! Signed in as ${user.name}` });
+      await loadMyBookings(token);
+    } catch (err) {
+      setAuthMessage({ type: 'error', text: err.message });
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    setAuthToken('');
+    setCurrentUser(null);
+    localStorage.removeItem('tutoring_auth_token');
+    localStorage.removeItem('tutoring_user');
+    setMyBookings([]);
+    setBookingMessage({ type: 'info', text: 'You have signed out.' });
+  };
+
+  const selectPreset = (email, password) => {
+    setLoginEmail(email);
+    setLoginPassword(password);
+  };
 
   const bookSlot = async (slotId) => {
     if (!authToken) {
-      setBookingMessage({ type: 'error', text: 'Sign in and provide an authentication token before booking.' });
+      setShowAuthModal(true);
+      setBookingMessage({ type: 'error', text: 'Please sign in first to book a tutoring session.' });
       return;
     }
     setBookingSlotId(slotId);
@@ -91,7 +307,7 @@ function App() {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error?.message || 'Unable to book this slot');
-      setBookingMessage({ type: 'success', text: 'Slot booked successfully.' });
+      setBookingMessage({ type: 'success', text: 'Slot booked successfully!' });
       await searchSlots();
       await loadMyBookings();
     } catch (err) {
@@ -102,24 +318,21 @@ function App() {
     }
   };
 
-  const loadMyBookings = async () => {
-    if (!authToken) {
-      setSessionMessage({ type: 'error', text: 'Enter your bearer token above to view your sessions.' });
-      return;
-    }
-    setMyBookingsLoading(true);
+  const cancelSession = async (bookingId) => {
+    if (!confirm('Are you sure you want to cancel this booking?')) return;
     setSessionMessage(null);
     try {
-      const response = await fetch('/api/bookings/mine', {
+      const response = await fetch(`/api/bookings/${bookingId}/cancel`, {
+        method: 'PATCH',
         headers: { Authorization: `Bearer ${authToken}` }
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error?.message || 'Unable to load sessions');
-      setMyBookings(payload.data || []);
+      if (!response.ok) throw new Error(payload.error?.message || 'Unable to cancel booking');
+      setSessionMessage({ type: 'success', text: 'Booking cancelled successfully.' });
+      await searchSlots();
+      await loadMyBookings();
     } catch (err) {
       setSessionMessage({ type: 'error', text: err.message });
-    } finally {
-      setMyBookingsLoading(false);
     }
   };
 
@@ -138,54 +351,411 @@ function App() {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error?.message || 'Unable to update session');
-      setSessionMessage({ type: 'success', text: isRating ? 'Thanks for your feedback.' : 'Session marked completed.' });
+      setSessionMessage({ type: 'success', text: isRating ? 'Thanks for your feedback!' : 'Session marked completed.' });
       await loadMyBookings();
     } catch (err) {
       setSessionMessage({ type: 'error', text: err.message });
     }
   };
 
+  const slotsByDate = useMemo(() => slots.reduce((groups, slot) => {
+    const date = new Date(slot.start_time).toLocaleDateString(undefined, {
+      weekday: 'short', month: 'short', day: 'numeric'
+    });
+    groups[date] = groups[date] || [];
+    groups[date].push(slot);
+    return groups;
+  }, {}), [slots]);
+
   const isConnected = healthData && (healthData.status === 'ok' || healthData.status === 'degraded');
   const dbConnected = healthData?.database?.status === 'connected';
 
   return (
     <div className="container">
+      {/* Top Navigation & User Authentication Bar */}
+      <nav style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '0.85rem 1.25rem',
+        background: 'rgba(17, 24, 39, 0.75)',
+        backdropFilter: 'blur(12px)',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        borderRadius: '14px',
+        marginBottom: '1.5rem'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <span style={{ fontSize: '1.3rem' }}>🎓</span>
+          <span style={{ fontWeight: 700, fontSize: '1.05rem', color: '#f3f4f6' }}>
+            Peer Tutor Scheduler
+          </span>
+          <span className={`status-pill ${loading ? 'degraded' : isConnected ? 'online' : 'offline'}`} style={{ marginLeft: '0.5rem', fontSize: '0.75rem' }}>
+            <span className="status-dot"></span>
+            {loading ? 'API...' : isConnected ? 'API Online' : 'API Offline'}
+          </span>
+        </div>
+
+        <div>
+          {currentUser ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
+              <span style={{ fontSize: '0.88rem', color: '#cbd5e1' }}>
+                👤 <strong>{currentUser.name}</strong> <span style={{ opacity: 0.7 }}>({currentUser.role})</span>
+              </span>
+              <button
+                className="btn-secondary"
+                onClick={handleLogout}
+                style={{ padding: '0.35rem 0.85rem', fontSize: '0.82rem' }}
+              >
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <button
+              className="btn"
+              onClick={() => { setAuthMode('login'); setAuthMessage(null); setShowAuthModal(true); }}
+              style={{ padding: '0.45rem 1.25rem', fontSize: '0.88rem', fontWeight: 600 }}
+            >
+              🔑 Sign in / Register
+            </button>
+          )}
+        </div>
+      </nav>
+
+      {/* Interactive Authentication Modal / Banner */}
+      {showAuthModal && !currentUser && (
+        <section className="glass-card" style={{
+          marginBottom: '2rem',
+          border: '1px solid rgba(99, 102, 241, 0.35)',
+          boxShadow: '0 10px 35px -5px rgba(99, 102, 241, 0.25)',
+          background: 'rgba(15, 23, 42, 0.95)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                className={`btn ${authMode === 'login' ? '' : 'btn-secondary'}`}
+                style={{ padding: '0.4rem 1.1rem', fontSize: '0.85rem' }}
+                onClick={() => { setAuthMode('login'); setAuthMessage(null); }}
+              >
+                Sign In
+              </button>
+              <button
+                className={`btn ${authMode === 'register' ? '' : 'btn-secondary'}`}
+                style={{ padding: '0.4rem 1.1rem', fontSize: '0.85rem' }}
+                onClick={() => { setAuthMode('register'); setAuthMessage(null); }}
+              >
+                Create Account
+              </button>
+            </div>
+            <button
+              onClick={() => setShowAuthModal(false)}
+              style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.2rem', cursor: 'pointer' }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {authMessage && (
+            <p className={authMessage.type === 'error' ? 'message error-message' : 'message success-message'} style={{ marginBottom: '1rem' }}>
+              {authMessage.text}
+            </p>
+          )}
+
+          {authMode === 'login' ? (
+            <div>
+              <form onSubmit={handleLogin} style={{ display: 'flex', flexWrap: 'wrap', gap: '0.85rem', alignItems: 'flex-end' }}>
+                <label style={{ flex: '1 1 240px' }}>
+                  Institutional email
+                  <input
+                    type="email"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    placeholder="name@university.edu"
+                    required
+                  />
+                </label>
+                <label style={{ flex: '1 1 200px' }}>
+                  Password
+                  <input
+                    type="password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="Enter password"
+                    required
+                  />
+                </label>
+                <button className="btn" type="submit" disabled={authLoading} style={{ padding: '0.65rem 1.5rem', alignSelf: 'flex-end' }}>
+                  {authLoading ? 'Signing in...' : 'Sign in'}
+                </button>
+              </form>
+
+              <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                <span style={{ fontSize: '0.8rem', color: '#94a3b8', marginRight: '0.5rem' }}>Quick Test Accounts:</span>
+                <div style={{ display: 'inline-flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{ fontSize: '0.78rem', padding: '0.25rem 0.65rem' }}
+                    onClick={() => selectPreset('bob.tutee@university.edu', 'bob-password')}
+                  >
+                    👤 Bob (Student/Tutee)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{ fontSize: '0.78rem', padding: '0.25rem 0.65rem' }}
+                    onClick={() => selectPreset('alice.tutor@university.edu', 'alice-password')}
+                  >
+                    👩‍🏫 Alice (Tutor)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{ fontSize: '0.78rem', padding: '0.25rem 0.65rem' }}
+                    onClick={() => selectPreset('admin@university.edu', 'admin-password')}
+                  >
+                    🛡️ Admin
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={handleRegister} style={{ display: 'flex', flexWrap: 'wrap', gap: '0.85rem', alignItems: 'flex-end' }}>
+              <label style={{ flex: '1 1 200px' }}>
+                Full Name
+                <input
+                  type="text"
+                  value={regName}
+                  onChange={(e) => setRegName(e.target.value)}
+                  placeholder="e.g. John Doe"
+                  required
+                />
+              </label>
+              <label style={{ flex: '1 1 220px' }}>
+                Institutional Email
+                <input
+                  type="email"
+                  value={regEmail}
+                  onChange={(e) => setRegEmail(e.target.value)}
+                  placeholder="student@university.edu"
+                  required
+                />
+              </label>
+              <label style={{ flex: '1 1 180px' }}>
+                Password (min 8 chars)
+                <input
+                  type="password"
+                  value={regPassword}
+                  onChange={(e) => setRegPassword(e.target.value)}
+                  placeholder="At least 8 characters"
+                  required
+                />
+              </label>
+              <label style={{ flex: '1 1 140px' }}>
+                Role
+                <select value={regRole} onChange={(e) => setRegRole(e.target.value)}>
+                  <option value="student">Student (Tutee)</option>
+                  <option value="tutor">Tutor</option>
+                  <option value="both">Both</option>
+                </select>
+              </label>
+              <button className="btn" type="submit" disabled={authLoading} style={{ padding: '0.65rem 1.5rem', alignSelf: 'flex-end' }}>
+                {authLoading ? 'Creating...' : 'Register'}
+              </button>
+            </form>
+          )}
+        </section>
+      )}
+
       <header className="hero-header">
         <div className="badge">
           <span>🚀</span> Team 3 • Shared Foundation (Issue #1)
         </div>
         <h1 className="title-gradient">Peer-to-Peer Tutoring Scheduler</h1>
         <p className="subtitle">
-          Small, runnable shared foundation with Express REST API, PostgreSQL schema,
-          UTC timezone enforcement, and responsive React frontend.
+          Interactive peer tutoring platform with atomic bookings, tutor ratings, and cancellation management.
         </p>
       </header>
 
       <main>
+        {/* Availability Search & Booking Section */}
         <section className="glass-card search-card" id="slot-search">
-          <div className="card-title">
-            <span>Find an available tutoring slot</span>
+          <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div>
+              <span style={{ fontSize: '1.25rem', fontWeight: 700 }}>Find an available tutoring slot</span>
+              <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '0.2rem 0 0' }}>
+                Select a subject and date from the live availability schedule below.
+              </p>
+            </div>
             <span className="result-count">{slots.length} result{slots.length === 1 ? '' : 's'}</span>
           </div>
+
+          {/* User-friendly Subject & Date Discovery Card */}
+          <div className="filter-guidance-card">
+            {/* Subjects Pill Bar */}
+            <div>
+              <div className="filter-group-header" style={{ marginBottom: '0.45rem' }}>
+                <span className="filter-group-title">
+                  <span>📚</span> Available Subjects ({allKnownSubjects.length}):
+                </span>
+                {Boolean(filters.subject || filters.from || filters.to || filters.minRating) && (
+                  <button type="button" className="clear-filters-btn" onClick={handleClearFilters}>
+                    ✕ Clear all filters
+                  </button>
+                )}
+              </div>
+              <div className="filter-pills-row">
+                <button
+                  type="button"
+                  className={`filter-pill ${!filters.subject ? 'active' : ''}`}
+                  onClick={() => handleSelectSubject('')}
+                >
+                  All Subjects
+                </button>
+                {allKnownSubjects.map((subject) => {
+                  const isSelected = filters.subject.toLowerCase() === subject.toLowerCase();
+                  return (
+                    <button
+                      key={subject}
+                      type="button"
+                      className={`filter-pill ${isSelected ? 'active' : ''}`}
+                      onClick={() => handleSelectSubject(subject)}
+                    >
+                      {subject}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Dates Pill Bar */}
+            {allKnownDates.length > 0 && (
+              <div style={{ paddingTop: '0.65rem', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                <div className="filter-group-header" style={{ marginBottom: '0.45rem' }}>
+                  <span className="filter-group-title">
+                    <span>📅</span> Available Dates ({allKnownDates.length} days):
+                  </span>
+                  <span className="date-window-info">
+                    Window: {allKnownDates[0]?.label} – {allKnownDates[allKnownDates.length - 1]?.label}
+                  </span>
+                </div>
+                <div className="filter-pills-row">
+                  <button
+                    type="button"
+                    className={`filter-pill ${!filters.from && !filters.to ? 'active' : ''}`}
+                    onClick={() => handleSelectDate('')}
+                  >
+                    Any Date
+                  </button>
+                  {allKnownDates.map((item) => {
+                    const isSelected = filters.from === item.iso && filters.to === item.iso;
+                    return (
+                      <button
+                        key={item.iso}
+                        type="button"
+                        className={`filter-pill ${isSelected ? 'active' : ''}`}
+                        onClick={() => handleSelectDate(item.iso)}
+                      >
+                        {item.label}
+                        {item.count > 0 && <span className="filter-pill-badge">{item.count}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Main Filter Dropdown Controls */}
           <form className="search-form" onSubmit={searchSlots}>
-            <label>Subject<input value={filters.subject} onChange={(e) => setFilters({ ...filters, subject: e.target.value })} placeholder="e.g. Mathematics" /></label>
-            <label>From<input type="date" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} /></label>
-            <label>To<input type="date" value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} /></label>
-            <label>Minimum tutor rating
-              <select value={filters.minRating} onChange={(e) => setFilters({ ...filters, minRating: e.target.value })}>
-                <option value="">Any rating</option>
-                {[4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating}+ stars</option>)}
+            <label>
+              Subject
+              <select
+                value={filters.subject}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const next = { ...filters, subject: val };
+                  setFilters(next);
+                  searchSlots(null, next);
+                }}
+              >
+                <option value="">All Subjects (Show All)</option>
+                {allKnownSubjects.map((subject) => (
+                  <option key={subject} value={subject}>
+                    {subject}
+                  </option>
+                ))}
               </select>
             </label>
-            <button className="btn search-button" type="submit" disabled={searchLoading}>{searchLoading ? 'Searching...' : 'Search slots'}</button>
+
+            <label>
+              From Date
+              <input
+                type="date"
+                value={filters.from}
+                min={allKnownDates[0]?.iso}
+                max={allKnownDates[allKnownDates.length - 1]?.iso}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const next = { ...filters, from: val };
+                  setFilters(next);
+                  searchSlots(null, next);
+                }}
+              />
+            </label>
+
+            <label>
+              To Date
+              <input
+                type="date"
+                value={filters.to}
+                min={filters.from || allKnownDates[0]?.iso}
+                max={allKnownDates[allKnownDates.length - 1]?.iso}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const next = { ...filters, to: val };
+                  setFilters(next);
+                  searchSlots(null, next);
+                }}
+              />
+            </label>
+
+            <label>
+              Min Tutor Rating
+              <select
+                value={filters.minRating}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const next = { ...filters, minRating: val };
+                  setFilters(next);
+                  searchSlots(null, next);
+                }}
+              >
+                <option value="">Any rating (1 - 5 stars)</option>
+                <option value="4.8">★ 4.8+ Top Rated</option>
+                <option value="4.5">★ 4.5+ Highly Rated</option>
+                <option value="4">★ 4.0+ stars</option>
+                <option value="3">★ 3.0+ stars</option>
+              </select>
+            </label>
+
+            <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'flex-end' }}>
+              <button className="btn search-button" type="submit" disabled={searchLoading}>
+                {searchLoading ? 'Searching...' : '🔍 Search'}
+              </button>
+            </div>
           </form>
-          <div className="booking-controls">
-            <label>Authenticated session token<input type="password" value={authToken} onChange={(e) => setAuthToken(e.target.value)} placeholder="Bearer token from /api/auth/login" /></label>
-            <button className="btn book-button" onClick={loadMyBookings} disabled={myBookingsLoading}>{myBookingsLoading ? 'Loading…' : 'Load my sessions'}</button>
-            {bookingMessage && <p className={bookingMessage.type === 'error' ? 'message error-message' : 'message success-message'}>{bookingMessage.text}</p>}
-          </div>
+
+          {bookingMessage && (
+            <p className={bookingMessage.type === 'error' ? 'message error-message' : 'message success-message'} style={{ marginTop: '0.85rem' }}>
+              {bookingMessage.text}
+            </p>
+          )}
+
           {searchError && <p className="message error-message">{searchError}</p>}
-          {!searchLoading && !searchError && slots.length === 0 && <p className="empty-state">No future, unbooked slots match these filters.</p>}
+          {!searchLoading && !searchError && slots.length === 0 && (
+            <p className="empty-state">No future, unbooked slots match these filters.</p>
+          )}
+
           <div className="calendar-grid">
             {Object.entries(slotsByDate).map(([date, dateSlots]) => (
               <div className="calendar-day" key={date}>
@@ -198,7 +768,11 @@ function App() {
                     </div>
                     <div className="slot-meta">
                       <span>{slot.tutor_name} · ★ {Number(slot.tutor_rating).toFixed(1)}</span>
-                      <button className="btn book-button" onClick={() => bookSlot(slot.id)} disabled={bookingSlotId === slot.id}>
+                      <button
+                        className="btn book-button"
+                        onClick={() => bookSlot(slot.id)}
+                        disabled={bookingSlotId === slot.id}
+                      >
                         {bookingSlotId === slot.id ? 'Booking...' : 'Book'}
                       </button>
                     </div>
@@ -209,16 +783,36 @@ function App() {
           </div>
         </section>
 
+        {/* My Sessions & Dashboard Section */}
         <section className="glass-card sessions-card">
           <div className="card-title">
-            <span>My sessions</span>
+            <span>My Bookings & Sessions</span>
             <span className="result-count">{myBookings.length} session{myBookings.length === 1 ? '' : 's'}</span>
           </div>
-          {sessionMessage && <p className={`message ${sessionMessage.type === 'error' ? 'error-message' : 'success-message'}`}>{sessionMessage.text}</p>}
-          {!myBookings.length && <p className="empty-state">Load your sessions with the bearer token above.</p>}
+
+          {sessionMessage && (
+            <p className={`message ${sessionMessage.type === 'error' ? 'error-message' : 'success-message'}`}>
+              {sessionMessage.text}
+            </p>
+          )}
+
+          {!currentUser && (
+            <p className="empty-state">
+              Please <button className="btn-secondary" onClick={() => { setAuthMode('login'); setShowAuthModal(true); }} style={{ padding: '0.2rem 0.7rem' }}>sign in</button> to view and manage your booked tutoring sessions.
+            </p>
+          )}
+
+          {currentUser && !myBookings.length && !myBookingsLoading && (
+            <p className="empty-state">You have no active sessions scheduled yet. Book one from the slots list above!</p>
+          )}
+
+          {myBookingsLoading && <p className="empty-state">Loading your sessions...</p>}
+
           <div className="sessions-list">
             {myBookings.map((booking) => {
               const draft = ratingDrafts[booking.id] || { rating: '5', comment: '' };
+              const isPastNotice = (new Date(booking.start_time).getTime() - Date.now()) > 24 * 60 * 60 * 1000;
+
               return (
                 <article className="session-card" key={booking.id}>
                   <div className="session-heading">
@@ -227,33 +821,67 @@ function App() {
                       <span>{booking.viewer_role === 'tutor' ? `Tutee: ${booking.tutee_name}` : `Tutor: ${booking.tutor_name}`}</span>
                       <span>{new Date(booking.start_time).toLocaleString()} · {booking.duration_minutes} min</span>
                     </div>
-                    <span className={`session-status status-${booking.status}`}>{booking.status}</span>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <span className={`session-status status-${booking.status}`}>{booking.status}</span>
+                      {booking.status === 'confirmed' && (
+                        <button
+                          className="btn-danger"
+                          onClick={() => cancelSession(booking.id)}
+                          style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem' }}
+                          title={isPastNotice ? 'Cancel booking' : 'Notice window alert'}
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
                   </div>
+
                   {booking.viewer_role === 'tutor' && booking.status === 'confirmed' && (
-                    <button className="btn book-button" onClick={() => updateSession(booking, 'complete')}>Mark session completed</button>
+                    <button className="btn book-button" onClick={() => updateSession(booking, 'complete')}>
+                      Mark session completed
+                    </button>
                   )}
+
                   {booking.viewer_role === 'tutee' && booking.status === 'completed' && booking.my_rating == null && (
                     <div className="rating-form">
                       <label>Rating
-                        <select value={draft.rating} onChange={(e) => setRatingDrafts({ ...ratingDrafts, [booking.id]: { ...draft, rating: e.target.value } })}>
-                          {[5, 4, 3, 2, 1].map((value) => <option key={value} value={value}>{value} star{value === 1 ? '' : 's'}</option>)}
+                        <select
+                          value={draft.rating}
+                          onChange={(e) => setRatingDrafts({ ...ratingDrafts, [booking.id]: { ...draft, rating: e.target.value } })}
+                        >
+                          {[5, 4, 3, 2, 1].map((value) => (
+                            <option key={value} value={value}>{value} star{value === 1 ? '' : 's'}</option>
+                          ))}
                         </select>
                       </label>
                       <label className="comment-field">Comment (optional)
-                        <textarea maxLength={2000} value={draft.comment} onChange={(e) => setRatingDrafts({ ...ratingDrafts, [booking.id]: { ...draft, comment: e.target.value } })} placeholder="Share feedback about this session" />
+                        <textarea
+                          maxLength={2000}
+                          value={draft.comment}
+                          onChange={(e) => setRatingDrafts({ ...ratingDrafts, [booking.id]: { ...draft, comment: e.target.value } })}
+                          placeholder="Share feedback about this session"
+                        />
                       </label>
-                      <button className="btn book-button" onClick={() => updateSession(booking, 'rating')}>Submit rating</button>
+                      <button className="btn book-button" onClick={() => updateSession(booking, 'rating')}>
+                        Submit rating
+                      </button>
                     </div>
                   )}
-                  {booking.viewer_role === 'tutee' && booking.my_rating != null && <p className="submitted-rating">Your rating: {'★'.repeat(booking.my_rating)}{'☆'.repeat(5 - booking.my_rating)}{booking.my_rating_comment ? ` · ${booking.my_rating_comment}` : ''}</p>}
+
+                  {booking.viewer_role === 'tutee' && booking.my_rating != null && (
+                    <p className="submitted-rating">
+                      Your rating: {'★'.repeat(booking.my_rating)}{'☆'.repeat(5 - booking.my_rating)}
+                      {booking.my_rating_comment ? ` · ${booking.my_rating_comment}` : ''}
+                    </p>
+                  )}
                 </article>
               );
             })}
           </div>
         </section>
 
+        {/* System Health Monitor */}
         <section className="grid-cards">
-          {/* Backend Connectivity Status */}
           <div className="glass-card" id="backend-health-card">
             <div className="card-title">
               <span>Backend API Status</span>
@@ -262,7 +890,7 @@ function App() {
                 {loading ? 'Checking...' : isConnected ? 'Connected' : 'Offline'}
               </span>
             </div>
-            
+
             <div className="info-row">
               <span className="info-label">Endpoint</span>
               <span className="info-value">GET /api/health</span>
@@ -295,72 +923,37 @@ function App() {
             </button>
           </div>
 
-          {/* Database & Model Architecture */}
           <div className="glass-card" id="db-status-card">
             <div className="card-title">
-              <span>Database & Schema</span>
+              <span>Database & Architecture</span>
               <span className={`status-pill ${dbConnected ? 'online' : 'degraded'}`}>
                 <span className="status-dot"></span>
-                {dbConnected ? 'PostgreSQL Active' : 'Configured / Pending PG'}
+                {dbConnected ? 'Database Active' : 'Fallback Active'}
               </span>
             </div>
-            
+
             <div className="info-row">
               <span className="info-label">Engine</span>
-              <span className="info-value">PostgreSQL 14+</span>
+              <span className="info-value">PostgreSQL 14+ / In-Memory Fallback</span>
             </div>
             <div className="info-row">
-              <span className="info-label">Timezone Handling</span>
-              <span className="info-value">Stored in UTC (TIMESTAMPTZ)</span>
+              <span className="info-label">Timezone</span>
+              <span className="info-value">UTC (TIMESTAMPTZ)</span>
             </div>
             <div className="info-row">
               <span className="info-label">Core Models</span>
               <span className="info-value">User, TutorProfile, Slot, Booking, Rating</span>
             </div>
             <div className="info-row">
-              <span className="info-label">Conflict Resolution</span>
-              <span className="info-value">Row Lock (FOR UPDATE)</span>
+              <span className="info-label">Concurrency</span>
+              <span className="info-value">SELECT FOR UPDATE (Row Locking)</span>
             </div>
-            
+
             <div style={{ marginTop: '0.9rem' }}>
               <span className="info-label" style={{ fontSize: '0.8rem' }}>Health Payload:</span>
               <pre className="code-box">
                 {JSON.stringify(healthData || { status: 'awaiting backend response' }, null, 2)}
               </pre>
-            </div>
-          </div>
-        </section>
-
-        {/* Conventions & Team Info */}
-        <section className="glass-card" style={{ marginBottom: '2rem' }}>
-          <div className="card-title">
-            <span>Team 3 Conventions & Architecture</span>
-          </div>
-
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '1.25rem' }}>
-            All 4 members can build their assigned issues (#2 to #12) in parallel on top of this foundation.
-          </p>
-
-          <div className="team-grid">
-            <div className="team-card team-lead">
-              <strong>Mohammed Shahid Javed Mokashi</strong>
-              <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>PES1UG24AM378</div>
-              <div style={{ color: '#818cf8', marginTop: '0.3rem', fontSize: '0.8rem' }}>Issue #1 Foundation Lead & Integration</div>
-            </div>
-            <div className="team-card">
-              <strong>Team Member 2</strong>
-              <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>Assigned Issues</div>
-              <div style={{ color: 'var(--text-muted)', marginTop: '0.3rem', fontSize: '0.8rem' }}>Auth, Users & Profiles</div>
-            </div>
-            <div className="team-card">
-              <strong>Team Member 3</strong>
-              <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>Assigned Issues</div>
-              <div style={{ color: 'var(--text-muted)', marginTop: '0.3rem', fontSize: '0.8rem' }}>Availability & Recurring Slots</div>
-            </div>
-            <div className="team-card">
-              <strong>Team Member 4</strong>
-              <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>Assigned Issues</div>
-              <div style={{ color: 'var(--text-muted)', marginTop: '0.3rem', fontSize: '0.8rem' }}>Bookings, Ratings & Notifications</div>
             </div>
           </div>
         </section>
