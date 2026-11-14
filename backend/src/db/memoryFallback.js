@@ -9,6 +9,7 @@ function createMemoryDb() {
       password_hash: bcrypt.hashSync('alice-password', 8),
       role: 'tutor',
       is_verified: true,
+      is_suspended: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     },
@@ -19,6 +20,7 @@ function createMemoryDb() {
       password_hash: bcrypt.hashSync('bob-password', 8),
       role: 'tutee',
       is_verified: true,
+      is_suspended: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     },
@@ -29,6 +31,7 @@ function createMemoryDb() {
       password_hash: bcrypt.hashSync('admin-password', 8),
       role: 'admin',
       is_verified: true,
+      is_suspended: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     },
@@ -39,6 +42,7 @@ function createMemoryDb() {
       password_hash: bcrypt.hashSync('david-password', 8),
       role: 'tutor',
       is_verified: true,
+      is_suspended: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     },
@@ -49,6 +53,7 @@ function createMemoryDb() {
       password_hash: bcrypt.hashSync('elena-password', 8),
       role: 'tutor',
       is_verified: true,
+      is_suspended: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     },
@@ -59,6 +64,7 @@ function createMemoryDb() {
       password_hash: bcrypt.hashSync('marcus-password', 8),
       role: 'tutor',
       is_verified: true,
+      is_suspended: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
@@ -246,28 +252,119 @@ function createMemoryDb() {
   const ratings = [];
   const reminderJobs = [];
 
+  let nextUserId = 10;
   let nextSlotId = 9;
   let nextBookingId = 1;
+  let nextRatingId = 1;
   let nextReminderJobId = 1;
+  let nextCleanupRunId = 1;
+  const cleanupRuns = [];
 
   async function execute(text, params = []) {
     const trimmed = text.trim();
 
     // 1. SELECT NOW()
-    if (/SELECT\s+NOW\(\)/i.test(trimmed)) {
+    if (/SELECT\s+NOW\(\)/is.test(trimmed)) {
       return { rows: [{ now_utc: new Date().toISOString() }] };
     }
 
     // 2. Users findById
-    if (/SELECT.*FROM\s+users\s+WHERE\s+id\s*=\s*\$1/i.test(trimmed)) {
+    if (/SELECT.*FROM\s+users.*WHERE.*id\s*=\s*\$1/is.test(trimmed)) {
       const user = users.find(u => u.id === Number(params[0]));
       return { rows: user ? [{ ...user }] : [] };
     }
 
     // 3. Users findByEmail
-    if (/SELECT.*FROM\s+users\s+WHERE\s+email\s*=\s*\$1/i.test(trimmed)) {
-      const user = users.find(u => u.email.toLowerCase() === String(params[0]).toLowerCase());
+    if (/SELECT.*FROM\s+users.*WHERE.*email\s*=\s*\$1/is.test(trimmed)) {
+      const user = users.find(u => u.email.toLowerCase() === String(params[0]).toLowerCase().trim());
       return { rows: user ? [{ ...user }] : [] };
+    }
+
+    // 3a. Users insert (registration)
+    if (/INSERT\s+INTO\s+users/is.test(trimmed)) {
+      const newUser = {
+        id: nextUserId++,
+        name: params[0],
+        email: String(params[1]).toLowerCase().trim(),
+        password_hash: params[2],
+        role: params[3] || 'student',
+        is_verified: params[4] !== undefined ? Boolean(params[4]) : true,
+        is_suspended: false,
+        verification_token: params[5] || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      users.push(newUser);
+      return { rows: [{ ...newUser }] };
+    }
+
+    // 3b. Users set suspended
+    if (/UPDATE\s+users\s+SET\s+is_suspended\s*=\s*\$2/is.test(trimmed)) {
+      const userId = Number(params[0]);
+      const isSuspended = Boolean(params[1]);
+      const user = users.find(u => u.id === userId);
+      if (user) {
+        user.is_suspended = isSuspended;
+        user.updated_at = new Date().toISOString();
+        return { rows: [{ ...user }] };
+      }
+      return { rows: [] };
+    }
+
+    // 3c. Users mark verified
+    if (/UPDATE\s+users\s+SET\s+is_verified\s*=\s*TRUE/is.test(trimmed)) {
+      const user = users.find(u => u.id === Number(params[0]));
+      if (user) {
+        user.is_verified = true;
+        user.verification_token = null;
+        user.updated_at = new Date().toISOString();
+        return { rows: [{ ...user }] };
+      }
+      return { rows: [] };
+    }
+
+    // 3d. Users mark deleted (deactivation)
+    if (/UPDATE\s+users\s+SET\s+deleted_at\s*=\s*CURRENT_TIMESTAMP/is.test(trimmed)) {
+      const user = users.find(u => u.id === Number(params[0]));
+      if (user) {
+        user.deleted_at = new Date().toISOString();
+        return { rows: [{ id: user.id, deleted_at: user.deleted_at }] };
+      }
+      return { rows: [] };
+    }
+
+    // 3e. Users anonymize
+    if (/UPDATE\s+users\s+SET\s+name\s*=\s*'Deleted User'/is.test(trimmed)) {
+      const user = users.find(u => u.id === Number(params[0]));
+      if (user) {
+        user.name = 'Deleted User';
+        user.email = `deleted-user-${user.id}@removed.invalid`;
+        user.password_hash = 'ANONYMIZED';
+        user.is_verified = false;
+        user.verification_token = null;
+        return { rows: [{ ...user }] };
+      }
+      return { rows: [] };
+    }
+
+    // 3f. Users find eligible for cleanup
+    if (/SELECT\s+id,\s*deleted_at\s+FROM\s+users\s+WHERE\s+deleted_at\s+IS\s+NOT\s+NULL/is.test(trimmed)) {
+      const retentionDays = Number(params[0]) || 30;
+      const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+      const eligible = users.filter(u => u.deleted_at && new Date(u.deleted_at).getTime() <= cutoff && !u.email.startsWith('deleted-user-'));
+      return { rows: eligible.map(u => ({ id: u.id, deleted_at: u.deleted_at })) };
+    }
+
+    // 3g. Record cleanup run
+    if (/INSERT\s+INTO\s+data_cleanup_runs/is.test(trimmed)) {
+      const run = {
+        id: nextCleanupRunId++,
+        retention_days: Number(params[0]),
+        purged_count: Number(params[1]),
+        executed_at: new Date().toISOString()
+      };
+      cleanupRuns.push(run);
+      return { rows: [{ ...run }] };
     }
 
     // 4. Tutor profiles findByUserId
@@ -285,45 +382,64 @@ function createMemoryDb() {
     }
 
     // 5. Tutor profiles upsert
-    if (/INSERT\s+INTO\s+tutor_profiles/i.test(trimmed)) {
+    if (/INSERT\s+INTO\s+tutor_profiles/is.test(trimmed)) {
       const userId = Number(params[0]);
-      const bio = params[1] || '';
-      const subjects = params[2] || [];
-      const hourlyRate = params[3] || 0.0;
       let existing = tutorProfiles.find(p => p.user_id === userId);
-      if (existing) {
-        existing.bio = bio;
-        existing.subjects = subjects;
-        existing.hourly_rate = hourlyRate;
-        existing.updated_at = new Date().toISOString();
-      } else {
-        existing = {
-          id: tutorProfiles.length + 1,
-          user_id: userId,
-          bio,
-          subjects,
-          hourly_rate: hourlyRate,
-          average_rating: 0.0,
-          total_reviews: 0,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
-        tutorProfiles.push(existing);
+      if (params.length >= 4) {
+        const bio = params[1] || '';
+        const subjects = params[2] || [];
+        const hourlyRate = params[3] || 0.0;
+        if (existing) {
+          existing.bio = bio;
+          existing.subjects = subjects;
+          existing.hourly_rate = hourlyRate;
+          existing.updated_at = new Date().toISOString();
+        } else {
+          existing = {
+            id: tutorProfiles.length + 1,
+            user_id: userId,
+            bio,
+            subjects,
+            hourly_rate: hourlyRate,
+            average_rating: 0.0,
+            total_reviews: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+          tutorProfiles.push(existing);
+        }
+      } else if (params.length === 3) {
+        // From RatingModel recalculation: [tutor_id, avg_rating, total_reviews]
+        const avgRating = Number(params[1]) || 0.0;
+        const totalReviews = Number(params[2]) || 0;
+        if (existing) {
+          existing.average_rating = avgRating;
+          existing.total_reviews = totalReviews;
+          existing.updated_at = new Date().toISOString();
+        }
       }
-      return { rows: [{ ...existing }] };
+      return { rows: existing ? [{ ...existing }] : [] };
+    }
+
+    // 5a. Tutor profiles clear bio on anonymize
+    if (/UPDATE\s+tutor_profiles\s+SET\s+bio\s*=\s*NULL\s+WHERE\s+user_id\s*=\s*\$1/is.test(trimmed)) {
+      const profile = tutorProfiles.find(p => p.user_id === Number(params[0]));
+      if (profile) profile.bio = null;
+      return { rows: [] };
     }
 
     // 6. Slots search
     if (/SELECT.*FROM\s+availability_slots.*WHERE.*s\.status\s*=\s*'available'/is.test(trimmed)) {
       const nowMs = Date.now();
-      // Always filter to future slots only (mirrors: AND s.start_time > CURRENT_TIMESTAMP)
-      let filtered = slots.filter(s => s.status === 'available' && new Date(s.start_time).getTime() > nowMs);
+      let filtered = slots.filter(s => {
+        if (s.status !== 'available') return false;
+        if (new Date(s.start_time).getTime() <= nowMs) return false;
+        // Don't show slots from suspended users
+        const tutor = users.find(u => u.id === s.tutor_id);
+        if (tutor && tutor.is_suspended) return false;
+        return true;
+      });
 
-      // Params are pushed in this order by AvailabilitySlotModel.search():
-      //   1. subject ILIKE  (if subject provided)
-      //   2. fromUtc        (if from provided)
-      //   3. toUtc          (if to provided)
-      //   4. minRating      (if minRating provided)
       let paramIdx = 0;
 
       if (/s\.subject\s+ILIKE/i.test(trimmed)) {
@@ -400,7 +516,7 @@ function createMemoryDb() {
     }
 
     // 9. Slot create
-    if (/INSERT\s+INTO\s+availability_slots/i.test(trimmed)) {
+    if (/INSERT\s+INTO\s+availability_slots/is.test(trimmed)) {
       const newSlot = {
         id: nextSlotId++,
         tutor_id: Number(params[0]),
@@ -419,10 +535,30 @@ function createMemoryDb() {
     }
 
     // 10. Slot updateStatus
-    if (/UPDATE\s+availability_slots\s+SET\s+status\s*=\s*\$2/i.test(trimmed)) {
-      const slot = slots.find(s => s.id === Number(params[0]));
-      if (slot) {
-        slot.status = params[1];
+    if (/UPDATE\s+availability_slots\s+SET\s+status\s*=/is.test(trimmed)) {
+      let targetStatus;
+      let slotId;
+
+      if (/status\s*=\s*\$2/i.test(trimmed)) {
+        slotId = Number(params[0]);
+        targetStatus = params[1];
+      } else if (/status\s*=\s*'available'/i.test(trimmed)) {
+        slotId = Number(params[0]);
+        targetStatus = 'available';
+      } else if (/status\s*=\s*'booked'/i.test(trimmed)) {
+        slotId = Number(params[0]);
+        targetStatus = 'booked';
+      } else if (/status\s*=\s*'completed'/i.test(trimmed)) {
+        slotId = Number(params[0]);
+        targetStatus = 'completed';
+      } else if (/status\s*=\s*'removed'/i.test(trimmed)) {
+        slotId = Number(params[0]);
+        targetStatus = 'removed';
+      }
+
+      const slot = slots.find(s => s.id === slotId);
+      if (slot && targetStatus) {
+        slot.status = targetStatus;
         slot.updated_at = new Date().toISOString();
         return { rows: [{ ...slot }] };
       }
@@ -430,7 +566,7 @@ function createMemoryDb() {
     }
 
     // 11. Bookings create
-    if (/INSERT\s+INTO\s+bookings/i.test(trimmed)) {
+    if (/INSERT\s+INTO\s+bookings/is.test(trimmed)) {
       const newBooking = {
         id: nextBookingId++,
         slot_id: Number(params[0]),
@@ -477,6 +613,7 @@ function createMemoryDb() {
         const slot = slots.find(s => s.id === b.slot_id);
         const tutor = users.find(u => u.id === b.tutor_id);
         const tutee = users.find(u => u.id === b.tutee_id);
+        const rating = ratings.find(r => r.booking_id === b.id);
         return {
           ...b,
           subject: slot ? slot.subject : 'Tutoring Session',
@@ -484,17 +621,27 @@ function createMemoryDb() {
           end_time: slot ? slot.end_time : new Date().toISOString(),
           duration_minutes: slot ? slot.duration_minutes : 60,
           tutor_name: tutor ? tutor.name : 'Tutor',
-          tutee_name: tutee ? tutee.name : 'Tutee'
+          tutee_name: tutee ? tutee.name : 'Tutee',
+          my_rating: rating ? rating.rating : null,
+          my_rating_comment: rating ? rating.comment : null
         };
       });
       return { rows };
     }
 
     // 14. Bookings cancel update
-    if (/UPDATE\s+bookings\s+SET\s+status\s*=\s*'cancelled'/i.test(trimmed)) {
-      const bookingId = Number(params[0]);
-      const cancelledBy = Number(params[1]);
-      const reason = params[2] || 'Cancelled';
+    if (/UPDATE\s+bookings\s+SET\s+status\s*=\s*'cancelled'/is.test(trimmed)) {
+      let bookingId, reason, cancelledBy;
+      if (params.length === 3) {
+        reason = params[0];
+        cancelledBy = Number(params[1]);
+        bookingId = Number(params[2]);
+      } else {
+        bookingId = Number(params[0]);
+        cancelledBy = Number(params[1]);
+        reason = params[2] || 'Cancelled';
+      }
+
       const booking = bookings.find(b => b.id === bookingId);
       if (booking) {
         booking.status = 'cancelled';
@@ -507,8 +654,72 @@ function createMemoryDb() {
       return { rows: [] };
     }
 
-    // 15. Reminder jobs insert / update
-    if (/INSERT\s+INTO\s+reminder_jobs/i.test(trimmed)) {
+    // 14a. Bookings reschedule
+    if (/UPDATE\s+bookings\s+SET\s+slot_id\s*=\s*\$2/is.test(trimmed)) {
+      const bookingId = Number(params[0]);
+      const newSlotId = Number(params[1]);
+      const booking = bookings.find(b => b.id === bookingId);
+      if (booking) {
+        booking.slot_id = newSlotId;
+        booking.updated_at = new Date().toISOString();
+        return { rows: [{ ...booking }] };
+      }
+      return { rows: [] };
+    }
+
+    // 14b. Bookings complete
+    if (/UPDATE\s+bookings\s+SET\s+status\s*=\s*'completed'/is.test(trimmed)) {
+      const bookingId = Number(params[0]);
+      const booking = bookings.find(b => b.id === bookingId);
+      if (booking) {
+        booking.status = 'completed';
+        booking.updated_at = new Date().toISOString();
+        return { rows: [{ ...booking }] };
+      }
+      return { rows: [] };
+    }
+
+    // 15. Ratings
+    if (/SELECT.*FROM\s+ratings.*WHERE.*booking_id\s*=\s*\$1/is.test(trimmed)) {
+      const bookingId = Number(params[0]);
+      const existing = ratings.find(r => r.booking_id === bookingId);
+      return { rows: existing ? [{ ...existing }] : [], rowCount: existing ? 1 : 0 };
+    }
+
+    if (/SELECT.*FROM\s+ratings\s+r.*WHERE.*r\.tutor_id\s*=\s*\$1/is.test(trimmed)) {
+      const tutorId = Number(params[0]);
+      const tutorRatings = ratings.filter(r => r.tutor_id === tutorId).map(r => {
+        const tutee = users.find(u => u.id === r.tutee_id);
+        return { ...r, tutee_name: tutee ? tutee.name : 'Student' };
+      });
+      return { rows: tutorRatings, rowCount: tutorRatings.length };
+    }
+
+    if (/INSERT\s+INTO\s+ratings/is.test(trimmed)) {
+      const newRating = {
+        id: nextRatingId++,
+        booking_id: Number(params[0]),
+        tutor_id: Number(params[1]),
+        tutee_id: Number(params[2]),
+        rating: Number(params[3]),
+        comment: params[4] || null,
+        created_at: new Date().toISOString()
+      };
+      ratings.push(newRating);
+      return { rows: [{ ...newRating }] };
+    }
+
+    if (/SELECT\s+COUNT\(\*\).*AVG\(rating\).*FROM\s+ratings\s+WHERE\s+tutor_id\s*=\s*\$1/is.test(trimmed)) {
+      const tutorId = Number(params[0]);
+      const tutorRatings = ratings.filter(r => r.tutor_id === tutorId);
+      const totalReviews = tutorRatings.length;
+      const sum = tutorRatings.reduce((acc, r) => acc + r.rating, 0);
+      const avgRating = totalReviews > 0 ? Math.round((sum / totalReviews) * 100) / 100 : 0.0;
+      return { rows: [{ total_reviews: totalReviews, avg_rating: avgRating }] };
+    }
+
+    // 16. Reminder jobs insert / update
+    if (/INSERT\s+INTO\s+reminder_jobs/is.test(trimmed)) {
       const job = {
         id: nextReminderJobId++,
         booking_id: Number(params[0]),
@@ -524,7 +735,7 @@ function createMemoryDb() {
       return { rows: [{ ...job }] };
     }
 
-    if (/UPDATE\s+reminder_jobs/i.test(trimmed)) {
+    if (/UPDATE\s+reminder_jobs/is.test(trimmed)) {
       return { rows: [] };
     }
 

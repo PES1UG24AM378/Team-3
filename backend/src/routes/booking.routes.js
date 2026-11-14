@@ -63,10 +63,10 @@ router.post(
 );
 
 /**
- * @route GET /api/bookings/mine
+ * @route GET /api/bookings/mine and GET /api/bookings
  * @desc List the authenticated user's sessions and rating state
  */
-router.get('/mine', authenticate, async (req, res, next) => {
+router.get(['/mine', '/'], authenticate, async (req, res, next) => {
   try {
     const bookings = await BookingModel.findByUserId(req.user.id);
     res.json({ data: bookings });
