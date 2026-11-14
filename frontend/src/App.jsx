@@ -34,6 +34,19 @@ function App() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState(null);
 
+  // Available catalogs for discovery
+  const [allKnownSubjects, setAllKnownSubjects] = useState([
+    'Algorithms & Complexity',
+    'Calculus',
+    'Data Structures',
+    'Database Systems',
+    'Discrete Mathematics',
+    'Linear Algebra',
+    'Machine Learning',
+    'Physics'
+  ]);
+  const [allKnownDates, setAllKnownDates] = useState([]);
+
   // Booking & Session management
   const [bookingSlotId, setBookingSlotId] = useState(null);
   const [bookingMessage, setBookingMessage] = useState(null);
@@ -41,6 +54,40 @@ function App() {
   const [myBookingsLoading, setMyBookingsLoading] = useState(false);
   const [sessionMessage, setSessionMessage] = useState(null);
   const [ratingDrafts, setRatingDrafts] = useState({});
+
+  const updateAvailableCatalogs = (slotList) => {
+    if (!slotList || !slotList.length) return;
+    const subjects = new Set([
+      'Algorithms & Complexity',
+      'Calculus',
+      'Data Structures',
+      'Database Systems',
+      'Discrete Mathematics',
+      'Linear Algebra',
+      'Machine Learning',
+      'Physics'
+    ]);
+    slotList.forEach((s) => {
+      if (s.subject) subjects.add(s.subject);
+    });
+    setAllKnownSubjects(Array.from(subjects).sort());
+
+    const datesMap = new Map();
+    slotList.forEach((s) => {
+      if (s.start_time) {
+        const iso = s.start_time.slice(0, 10);
+        const d = new Date(s.start_time);
+        const label = d.toLocaleDateString(undefined, {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric'
+        });
+        const currentCount = datesMap.get(iso)?.count || 0;
+        datesMap.set(iso, { iso, label, count: currentCount + 1 });
+      }
+    });
+    setAllKnownDates(Array.from(datesMap.values()).sort((a, b) => a.iso.localeCompare(b.iso)));
+  };
 
   const fetchHealth = async () => {
     setLoading(true);
@@ -62,23 +109,36 @@ function App() {
     fetchHealth();
   }, []);
 
-  const searchSlots = async (event) => {
+  const searchSlots = async (event, customFilters = null) => {
     event?.preventDefault();
     setSearchLoading(true);
     setSearchError(null);
     setBookingMessage(null);
 
+    const activeFilters = customFilters || filters;
     const params = new URLSearchParams();
-    if (filters.subject.trim()) params.set('subject', filters.subject.trim());
-    if (filters.from) params.set('from', new Date(`${filters.from}T00:00:00`).toISOString());
-    if (filters.to) params.set('to', new Date(`${filters.to}T23:59:59.999`).toISOString());
-    if (filters.minRating) params.set('minRating', filters.minRating);
+    if (activeFilters.subject && activeFilters.subject.trim()) {
+      params.set('subject', activeFilters.subject.trim());
+    }
+    if (activeFilters.from) {
+      params.set('from', new Date(`${activeFilters.from}T00:00:00`).toISOString());
+    }
+    if (activeFilters.to) {
+      params.set('to', new Date(`${activeFilters.to}T23:59:59.999`).toISOString());
+    }
+    if (activeFilters.minRating) {
+      params.set('minRating', activeFilters.minRating);
+    }
 
     try {
       const response = await fetch(`/api/slots?${params.toString()}`);
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error?.message || 'Unable to search available slots');
-      setSlots(payload.data || []);
+      const data = payload.data || [];
+      setSlots(data);
+      if (!customFilters && !filters.subject && !filters.from && !filters.to && !filters.minRating) {
+        updateAvailableCatalogs(data);
+      }
     } catch (err) {
       setSearchError(err.message);
       setSlots([]);
@@ -87,8 +147,41 @@ function App() {
     }
   };
 
+  const handleSelectSubject = (subject) => {
+    const nextFilters = { ...filters, subject: filters.subject === subject ? '' : subject };
+    setFilters(nextFilters);
+    searchSlots(null, nextFilters);
+  };
+
+  const handleSelectDate = (isoDate) => {
+    const isCurrent = filters.from === isoDate && filters.to === isoDate;
+    const nextFilters = {
+      ...filters,
+      from: isCurrent ? '' : isoDate,
+      to: isCurrent ? '' : isoDate
+    };
+    setFilters(nextFilters);
+    searchSlots(null, nextFilters);
+  };
+
+  const handleClearFilters = () => {
+    const reset = { subject: '', from: '', to: '', minRating: '' };
+    setFilters(reset);
+    searchSlots(null, reset);
+  };
+
   useEffect(() => {
-    searchSlots();
+    fetch('/api/slots')
+      .then((res) => res.json())
+      .then((payload) => {
+        if (payload.data) {
+          updateAvailableCatalogs(payload.data);
+          setSlots(payload.data);
+        }
+      })
+      .catch(() => {
+        searchSlots();
+      });
   }, []);
 
   const loadMyBookings = async (token = authToken) => {
@@ -486,44 +579,170 @@ function App() {
       <main>
         {/* Availability Search & Booking Section */}
         <section className="glass-card search-card" id="slot-search">
-          <div className="card-title">
-            <span>Find an available tutoring slot</span>
+          <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div>
+              <span style={{ fontSize: '1.25rem', fontWeight: 700 }}>Find an available tutoring slot</span>
+              <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '0.2rem 0 0' }}>
+                Select a subject and date from the live availability schedule below.
+              </p>
+            </div>
             <span className="result-count">{slots.length} result{slots.length === 1 ? '' : 's'}</span>
           </div>
 
+          {/* User-friendly Subject & Date Discovery Card */}
+          <div className="filter-guidance-card">
+            {/* Subjects Pill Bar */}
+            <div>
+              <div className="filter-group-header" style={{ marginBottom: '0.45rem' }}>
+                <span className="filter-group-title">
+                  <span>📚</span> Available Subjects ({allKnownSubjects.length}):
+                </span>
+                {Boolean(filters.subject || filters.from || filters.to || filters.minRating) && (
+                  <button type="button" className="clear-filters-btn" onClick={handleClearFilters}>
+                    ✕ Clear all filters
+                  </button>
+                )}
+              </div>
+              <div className="filter-pills-row">
+                <button
+                  type="button"
+                  className={`filter-pill ${!filters.subject ? 'active' : ''}`}
+                  onClick={() => handleSelectSubject('')}
+                >
+                  All Subjects
+                </button>
+                {allKnownSubjects.map((subject) => {
+                  const isSelected = filters.subject.toLowerCase() === subject.toLowerCase();
+                  return (
+                    <button
+                      key={subject}
+                      type="button"
+                      className={`filter-pill ${isSelected ? 'active' : ''}`}
+                      onClick={() => handleSelectSubject(subject)}
+                    >
+                      {subject}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Dates Pill Bar */}
+            {allKnownDates.length > 0 && (
+              <div style={{ paddingTop: '0.65rem', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                <div className="filter-group-header" style={{ marginBottom: '0.45rem' }}>
+                  <span className="filter-group-title">
+                    <span>📅</span> Available Dates ({allKnownDates.length} days):
+                  </span>
+                  <span className="date-window-info">
+                    Window: {allKnownDates[0]?.label} – {allKnownDates[allKnownDates.length - 1]?.label}
+                  </span>
+                </div>
+                <div className="filter-pills-row">
+                  <button
+                    type="button"
+                    className={`filter-pill ${!filters.from && !filters.to ? 'active' : ''}`}
+                    onClick={() => handleSelectDate('')}
+                  >
+                    Any Date
+                  </button>
+                  {allKnownDates.map((item) => {
+                    const isSelected = filters.from === item.iso && filters.to === item.iso;
+                    return (
+                      <button
+                        key={item.iso}
+                        type="button"
+                        className={`filter-pill ${isSelected ? 'active' : ''}`}
+                        onClick={() => handleSelectDate(item.iso)}
+                      >
+                        {item.label}
+                        {item.count > 0 && <span className="filter-pill-badge">{item.count}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Main Filter Dropdown Controls */}
           <form className="search-form" onSubmit={searchSlots}>
-            <label>Subject
-              <input
+            <label>
+              Subject
+              <select
                 value={filters.subject}
-                onChange={(e) => setFilters({ ...filters, subject: e.target.value })}
-                placeholder="e.g. Mathematics, Algorithms"
-              />
-            </label>
-            <label>From
-              <input
-                type="date"
-                value={filters.from}
-                onChange={(e) => setFilters({ ...filters, from: e.target.value })}
-              />
-            </label>
-            <label>To
-              <input
-                type="date"
-                value={filters.to}
-                onChange={(e) => setFilters({ ...filters, to: e.target.value })}
-              />
-            </label>
-            <label>Minimum tutor rating
-              <select value={filters.minRating} onChange={(e) => setFilters({ ...filters, minRating: e.target.value })}>
-                <option value="">Any rating</option>
-                {[4, 3, 2, 1].map((rating) => (
-                  <option key={rating} value={rating}>{rating}+ stars</option>
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const next = { ...filters, subject: val };
+                  setFilters(next);
+                  searchSlots(null, next);
+                }}
+              >
+                <option value="">All Subjects (Show All)</option>
+                {allKnownSubjects.map((subject) => (
+                  <option key={subject} value={subject}>
+                    {subject}
+                  </option>
                 ))}
               </select>
             </label>
-            <button className="btn search-button" type="submit" disabled={searchLoading}>
-              {searchLoading ? 'Searching...' : 'Search slots'}
-            </button>
+
+            <label>
+              From Date
+              <input
+                type="date"
+                value={filters.from}
+                min={allKnownDates[0]?.iso}
+                max={allKnownDates[allKnownDates.length - 1]?.iso}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const next = { ...filters, from: val };
+                  setFilters(next);
+                  searchSlots(null, next);
+                }}
+              />
+            </label>
+
+            <label>
+              To Date
+              <input
+                type="date"
+                value={filters.to}
+                min={filters.from || allKnownDates[0]?.iso}
+                max={allKnownDates[allKnownDates.length - 1]?.iso}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const next = { ...filters, to: val };
+                  setFilters(next);
+                  searchSlots(null, next);
+                }}
+              />
+            </label>
+
+            <label>
+              Min Tutor Rating
+              <select
+                value={filters.minRating}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const next = { ...filters, minRating: val };
+                  setFilters(next);
+                  searchSlots(null, next);
+                }}
+              >
+                <option value="">Any rating (1 - 5 stars)</option>
+                <option value="4.8">★ 4.8+ Top Rated</option>
+                <option value="4.5">★ 4.5+ Highly Rated</option>
+                <option value="4">★ 4.0+ stars</option>
+                <option value="3">★ 3.0+ stars</option>
+              </select>
+            </label>
+
+            <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'flex-end' }}>
+              <button className="btn search-button" type="submit" disabled={searchLoading}>
+                {searchLoading ? 'Searching...' : '🔍 Search'}
+              </button>
+            </div>
           </form>
 
           {bookingMessage && (
