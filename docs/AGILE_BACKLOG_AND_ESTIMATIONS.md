@@ -57,3 +57,34 @@ The team utilized Planning Poker based on the modified Fibonacci sequence ($1, 2
 - **Primary Deliverable:** 2-Minute Working Product Demonstration Video (`media/sprint2-demo.mp4`)
 
 **Total Mini-Project Scope Delivered:** **82 Story Points across 20 closed issues and 16 peer-reviewed pull requests.**
+
+---
+
+## 4. Individual Team Member Contribution Breakdown
+
+To facilitate oral evaluation and individual grading per academic guidelines, the table below provides the authoritative record of individual story point allocation, owned issues, raised pull requests, and peer reviews:
+
+| Member Name | Academic ID | Project Role | Story Points | Issues Owned | Pull Requests Raised | Pull Requests Reviewed | Key Modules Delivered |
+|---|---|---|---|---|---|---|---|
+| **Mohammed Shahid Javed Mokashi** | PES1UG24AM378 | Technical Lead / Developer | **25 SP** | #5, #6, #8, #13, #30 | PR #15, #17, #18, #34, #44 | PR #14, #16, #32, #36, #38, #40, #41, #43 | Atomic booking engine, pessimistic row-locking (`FOR UPDATE`), 24h cancellation rule, in-memory fallback store, CI fixes, Sprint 1 video. |
+| **Vallabha Anand Bhilare** | PES1UG24AM370 | Product Owner / Engineer | **23 SP** | #1, #11, #12, #28, #29 | PR #15, #36, #37, #38, #40 | PR #14, #17, #18, #32, #34, #41 | User authentication (Bcrypt + JWT), registration flow, administrative moderation API, server-side authorization middleware, rate limiting. |
+| **Shreyas K M** | PES1UG24AM334 | QA Lead / Test Engineer | **18 SP** | #4, #9, #10, #26, #27 | PR #17, #32, #34, #35 | PR #15, #16, #18, #36, #37, #38, #40 | Automated test suite (83 test cases), slot search filters, post-session ratings and feedback comments, GitHub Actions CI automation. |
+| **Mythri S** | PES1UG24AM243 | Test Engineer / Scrum Master | **16 SP** | #2, #3, #7, #31, #39 | PR #14, #16, #18, #33, #41, #43 | PR #15, #17, #32, #34, #36, #40 | Tutor profile setup, availability slot creation/validation, scheduled reminder worker, data retention cleanup worker, Sprint 2 video. |
+| **Team 3 Total** | — | — | **82 SP** | **20 Issues** | **16 PRs** | **All Merged** | **100% Core Requirements Implemented** |
+
+---
+
+## 5. Agile Scrum Ceremony & Artifact Records
+
+* **Sprint 1 Duration:** 15-09-2026 to 12-10-2026 (Velocity: 44 Story Points).
+  * *Sprint Goal:* Implement user authentication, profile management, tutor slot creation, slot search, atomic booking, and email reminder job creation.
+  * *Deliverable:* Working core application and 1-minute outcome video (`media/Sprint1 Demo video.mp4`).
+* **Sprint 2 Duration:** 13-10-2026 to 14-11-2026 (Velocity: 38 Story Points).
+  * *Sprint Goal:* Implement post-session ratings and feedback, administrative moderation, security authorization hardening, scheduled retention cleanup, test harness (83 tests), and responsive UI.
+  * *Deliverable:* Feature-complete system and 2-minute outcome video (`media/sprint2-demo.mp4`).
+* **Definition of Done (DoD):**
+  1. Code implemented adhering to IEEE SRS v1.1 and SAD v1.0 specifications.
+  2. 100% pass on all applicable unit and integration tests.
+  3. Code review completed by at least one peer team member.
+  4. Pull Request merged into repository `main` branch.
+  5. QA reports and documentation synchronized.

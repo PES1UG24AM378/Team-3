@@ -18,11 +18,14 @@ The backend API is served under `/api`. Dates are stored and returned in UTC. Er
 
 ## Official Project Documentation & Reports
 
+- 📋 **Evaluation Checklist & Compliance Audit:** [Official Evaluation Checklist (100% Compliant)](docs/FINAL_SUBMISSION_CHECKLIST_AND_AUDIT.md)
+- 🎓 **Viva & Final Demo Preparation Guide:** [Viva FAQs & Team Presentation Guide](docs/VIVA_AND_FINAL_DEMO_PREPARATION_GUIDE.md)
 - 📄 **SRS:** [Software Requirements Specification (IEEE 830)](SRS_Peer_to_Peer_Tutoring_Scheduler.docx)
 - 🏗️ **SAD:** [Software Architecture and Design (IEEE 1016/42010)](SAD_Peer_to_Peer_Tutoring_Scheduler.docx)
 - 📝 **Architecture Addendum & ADR-03:** [SAD Architecture Addendum](docs/SAD_ARCHITECTURE_ADDENDUM.md)
 - 🧪 **Test Plan:** [Software Test Plan (IEEE 829)](Test_Plan_Peer_to_Peer_Tutoring_Scheduler.docx)
-- 🏃 **Agile Backlog & Story Points:** [Agile Sprint Planning & Estimations](docs/AGILE_BACKLOG_AND_ESTIMATIONS.md)
+- 🔬 **Test Plan Addendum & Test Cases:** [IEEE 829 Test Plan Addendum (TC-01 to TC-10)](docs/TEST_PLAN_ADDENDUM.md)
+- 🏃 **Agile Backlog & Story Points:** [Agile Sprint Planning & Estimations (82 SP)](docs/AGILE_BACKLOG_AND_ESTIMATIONS.md)
 - 📊 **QA Reports:**
   - [Unit Test Report (83 tests, 100% pass on runnable)](docs/unit-test-report.md)
   - [Code Coverage Report (70.29% line, 72.94% function)](docs/code-coverage-report.md)
