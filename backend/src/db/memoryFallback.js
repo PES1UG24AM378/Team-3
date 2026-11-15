@@ -141,6 +141,12 @@ function createMemoryDb() {
   inSixDays.setUTCHours(13, 0, 0, 0);
   const inSixDaysEnd = new Date(inSixDays.getTime() + 60 * 60 * 1000);
 
+  const pastSessionStart = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const pastSessionEnd = new Date(Date.now() - 2 * 60 * 60 * 1000);
+
+  const yesterdayStart = new Date(Date.now() - 26 * 60 * 60 * 1000);
+  const yesterdayEnd = new Date(Date.now() - 25 * 60 * 60 * 1000);
+
   const slots = [
     {
       id: 1,
@@ -245,16 +251,67 @@ function createMemoryDb() {
       recurrence_pattern: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
+    },
+    {
+      id: 9,
+      tutor_id: 1,
+      subject: 'Algorithms & Complexity',
+      start_time: pastSessionStart.toISOString(),
+      end_time: pastSessionEnd.toISOString(),
+      duration_minutes: 60,
+      status: 'booked',
+      is_recurring: false,
+      recurrence_pattern: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    },
+    {
+      id: 10,
+      tutor_id: 1,
+      subject: 'Data Structures',
+      start_time: yesterdayStart.toISOString(),
+      end_time: yesterdayEnd.toISOString(),
+      duration_minutes: 60,
+      status: 'completed',
+      is_recurring: false,
+      recurrence_pattern: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     }
   ];
 
-  const bookings = [];
+  const bookings = [
+    {
+      id: 1,
+      slot_id: 9,
+      tutor_id: 1,
+      tutee_id: 2,
+      status: 'confirmed',
+      cancellation_reason: null,
+      cancelled_by: null,
+      cancelled_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    },
+    {
+      id: 2,
+      slot_id: 10,
+      tutor_id: 1,
+      tutee_id: 2,
+      status: 'completed',
+      cancellation_reason: null,
+      cancelled_by: null,
+      cancelled_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+  ];
   const ratings = [];
   const reminderJobs = [];
 
   let nextUserId = 10;
-  let nextSlotId = 9;
-  let nextBookingId = 1;
+  let nextSlotId = 11;
+  let nextBookingId = 3;
   let nextRatingId = 1;
   let nextReminderJobId = 1;
   let nextCleanupRunId = 1;
@@ -584,7 +641,7 @@ function createMemoryDb() {
     }
 
     // 12. Bookings findById
-    if (/SELECT.*FROM\s+bookings\s+b.*WHERE\s+b\.id\s*=\s*\$1/is.test(trimmed)) {
+    if (/SELECT.*FROM\s+bookings(\s+b)?.*WHERE\s+(b\.)?id\s*=\s*\$1/is.test(trimmed)) {
       const booking = bookings.find(b => b.id === Number(params[0]));
       if (!booking) return { rows: [] };
       const slot = slots.find(s => s.id === booking.slot_id);
@@ -623,7 +680,8 @@ function createMemoryDb() {
           tutor_name: tutor ? tutor.name : 'Tutor',
           tutee_name: tutee ? tutee.name : 'Tutee',
           my_rating: rating ? rating.rating : null,
-          my_rating_comment: rating ? rating.comment : null
+          my_rating_comment: rating ? rating.comment : null,
+          viewer_role: b.tutor_id === userId ? 'tutor' : 'tutee'
         };
       });
       return { rows };

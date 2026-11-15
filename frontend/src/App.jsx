@@ -812,13 +812,16 @@ function App() {
             {myBookings.map((booking) => {
               const draft = ratingDrafts[booking.id] || { rating: '5', comment: '' };
               const isPastNotice = (new Date(booking.start_time).getTime() - Date.now()) > 24 * 60 * 60 * 1000;
+              const isTutor = booking.viewer_role === 'tutor' || (currentUser && (booking.tutor_id === currentUser.id || currentUser.role === 'tutor'));
+              const isTutee = booking.viewer_role === 'tutee' || (currentUser && (booking.tutee_id === currentUser.id || currentUser.role === 'student'));
+              const sessionEnded = new Date(booking.end_time || booking.start_time).getTime() <= Date.now();
 
               return (
                 <article className="session-card" key={booking.id}>
                   <div className="session-heading">
                     <div>
                       <strong>{booking.subject}</strong>
-                      <span>{booking.viewer_role === 'tutor' ? `Tutee: ${booking.tutee_name}` : `Tutor: ${booking.tutor_name}`}</span>
+                      <span>{isTutor ? `Tutee: ${booking.tutee_name}` : `Tutor: ${booking.tutor_name}`}</span>
                       <span>{new Date(booking.start_time).toLocaleString()} · {booking.duration_minutes} min</span>
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -836,13 +839,36 @@ function App() {
                     </div>
                   </div>
 
-                  {booking.viewer_role === 'tutor' && booking.status === 'confirmed' && (
-                    <button className="btn book-button" onClick={() => updateSession(booking, 'complete')}>
-                      Mark session completed
-                    </button>
+                  {isTutor && booking.status === 'confirmed' && (
+                    <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                      <button
+                        className="btn book-button"
+                        onClick={() => updateSession(booking, 'complete')}
+                        style={{
+                          background: sessionEnded ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : '#334155',
+                          color: '#ffffff',
+                          cursor: 'pointer'
+                        }}
+                        title={sessionEnded ? 'Click to mark session completed' : 'Can be marked completed after scheduled end time'}
+                      >
+                        ✓ Mark session completed
+                      </button>
+                      {!sessionEnded && (
+                        <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                          (In progress · ends {new Date(booking.end_time || booking.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                        </span>
+                      )}
+                    </div>
                   )}
 
-                  {booking.viewer_role === 'tutee' && booking.status === 'completed' && booking.my_rating == null && (
+                  {isTutor && booking.status === 'completed' && booking.my_rating != null && (
+                    <p className="submitted-rating" style={{ color: '#fbbf24', marginTop: '0.5rem' }}>
+                      Student review: {'★'.repeat(booking.my_rating)}{'☆'.repeat(5 - booking.my_rating)}
+                      {booking.my_rating_comment ? ` · "${booking.my_rating_comment}"` : ''}
+                    </p>
+                  )}
+
+                  {isTutee && booking.status === 'completed' && booking.my_rating == null && (
                     <div className="rating-form">
                       <label>Rating
                         <select
@@ -868,7 +894,7 @@ function App() {
                     </div>
                   )}
 
-                  {booking.viewer_role === 'tutee' && booking.my_rating != null && (
+                  {isTutee && booking.my_rating != null && (
                     <p className="submitted-rating">
                       Your rating: {'★'.repeat(booking.my_rating)}{'☆'.repeat(5 - booking.my_rating)}
                       {booking.my_rating_comment ? ` · ${booking.my_rating_comment}` : ''}
