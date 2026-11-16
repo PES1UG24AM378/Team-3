@@ -337,6 +337,11 @@ function createMemoryDb() {
       return { rows: user ? [{ ...user }] : [] };
     }
 
+    // 3.1 Users findAll
+    if (/SELECT.*FROM\s+users(?!\s*WHERE)/is.test(trimmed)) {
+      return { rows: users.map(u => ({ ...u })) };
+    }
+
     // 3a. Users insert (registration)
     if (/INSERT\s+INTO\s+users/is.test(trimmed)) {
       const newUser = {
