@@ -1,4 +1,3 @@
-
 const db = require('../db');
 
 const UserModel = {
@@ -68,6 +67,16 @@ const UserModel = {
     );
 
     return res.rows[0];
+  },
+
+  async findAll() {
+    const res = await db.query(
+      `SELECT id, name, email, role, is_verified, is_suspended, created_at, updated_at
+       FROM users
+       ORDER BY created_at DESC, id DESC`
+    );
+
+    return res.rows;
   },
 
   async setSuspended(id, isSuspended) {
