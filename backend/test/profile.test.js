@@ -214,3 +214,25 @@ test('profile update removes control characters from plain text', async () => {
   assert.equal(savedValues.bio, 'Physics tutor');
   assert.deepEqual(savedValues.subjects, ['Physics']);
 });
+
+test('signed-in user can request account deactivation under data retention policy', async () => {
+  const { DataCleanupModel } = require('../src/models');
+  let deletedUserId;
+  const originalMarkDeleted = DataCleanupModel.markDeleted;
+  DataCleanupModel.markDeleted = async (id) => {
+    deletedUserId = id;
+    return { id, deleted_at: new Date() };
+  };
+
+  try {
+    const response = await request(app)
+      .delete('/api/profile')
+      .set(authenticatedRequest(23));
+
+    assert.equal(response.status, 200);
+    assert.equal(deletedUserId, 23);
+    assert.ok(response.body.message);
+  } finally {
+    DataCleanupModel.markDeleted = originalMarkDeleted;
+  }
+});

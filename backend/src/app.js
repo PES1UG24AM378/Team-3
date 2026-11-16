@@ -43,7 +43,7 @@ app.get('/health', (req, res) => res.redirect('/api/health'));
 
 // Mount API Routes
 app.use(`${config.apiPrefix}/health`, healthRoutes);
-app.use(`${config.apiPrefix}/auth/login`, authRoutes);
+app.use(`${config.apiPrefix}/auth`, authRoutes);
 app.use(`${config.apiPrefix}/slots`, slotRoutes);
 app.use(`${config.apiPrefix}/bookings`, bookingRoutes);
 app.use(`${config.apiPrefix}/profile`, profileRoutes);

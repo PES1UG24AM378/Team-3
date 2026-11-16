@@ -146,4 +146,21 @@ router.put('/', authenticate, async (req, res, next) => {
   }
 });
 
+/**
+ * DELETE /api/profile
+ * Request account deactivation/deletion under data retention policy (PRJ-SR-006)
+ */
+router.delete('/', authenticate, async (req, res, next) => {
+  try {
+    const { DataCleanupModel } = require('../models');
+    await DataCleanupModel.markDeleted(req.user.id);
+
+    res.json({
+      message: 'Account deactivated and scheduled for data retention cleanup'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

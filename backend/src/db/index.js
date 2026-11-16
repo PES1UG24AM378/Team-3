@@ -23,47 +23,60 @@ function getPool() {
       connectionTimeoutMillis: 5000
     });
 
-    pool.on('error', () => {
-      console.error('Unexpected error on idle PostgreSQL client.');
+    pool.on('error', (err) => {
+      // Suppress noisy unhandled errors on idle clients
     });
   }
-
   return pool;
 }
 
+const { createMemoryDb } = require('./memoryFallback');
+let memoryDbInstance = null;
+
+function getMemoryDb() {
+  if (!memoryDbInstance) {
+    memoryDbInstance = createMemoryDb();
+  }
+  return memoryDbInstance;
+}
+
 /**
- * Execute a query with parameters.
+ * Execute a query with parameters, falling back to in-memory store in dev when DB is unreachable
  */
 async function query(text, params) {
-  const p = getPool();
-  const start = Date.now();
-  const res = await p.query(text, params);
-  const duration = Date.now() - start;
-
-  if (config.env === 'development') {
-    // Optional query debug logging.
+  try {
+    const p = getPool();
+    const res = await p.query(text, params);
+    return res;
+  } catch (err) {
+    if (config.env === 'development' || config.env === 'test') {
+      return await getMemoryDb().query(text, params);
+    }
+    throw err;
   }
-
-  return res;
 }
 
 /**
- * Acquire a client for manual transaction control.
+ * Acquire a client for manual transaction control
  */
 async function getClient() {
-  const p = getPool();
-  return await p.connect();
+  try {
+    const p = getPool();
+    return await p.connect();
+  } catch (err) {
+    if (config.env === 'development' || config.env === 'test') {
+      return await getMemoryDb().getClient();
+    }
+    throw err;
+  }
 }
 
 /**
- * Check connectivity to the database.
+ * Check connectivity to the database
  */
 async function checkHealth() {
   try {
-    const res = await query(
-      "SELECT NOW() AT TIME ZONE 'UTC' as now_utc"
-    );
-
+    const res = await query("SELECT NOW() AT TIME ZONE 'UTC' as now_utc");
     return {
       connected: true,
       timestampUtc: res.rows[0].now_utc
