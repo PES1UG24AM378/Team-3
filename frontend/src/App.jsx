@@ -18,7 +18,7 @@ function App() {
   });
 
   const [showAuthModal, setShowAuthModal] = useState(() => !localStorage.getItem('tutoring_auth_token'));
-  const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
+  const [authMode, setAuthMode] = useState('login');
   const [loginEmail, setLoginEmail] = useState('bob.tutee@university.edu');
   const [loginPassword, setLoginPassword] = useState('bob-password');
   const [regName, setRegName] = useState('');
@@ -54,6 +54,14 @@ function App() {
   const [myBookingsLoading, setMyBookingsLoading] = useState(false);
   const [sessionMessage, setSessionMessage] = useState(null);
   const [ratingDrafts, setRatingDrafts] = useState({});
+
+  // Admin dashboard state
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminSlots, setAdminSlots] = useState([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState(null);
+  const [adminMessage, setAdminMessage] = useState(null);
+  const [adminActionId, setAdminActionId] = useState(null);
 
   const updateAvailableCatalogs = (slotList) => {
     if (!slotList || !slotList.length) return;
@@ -358,6 +366,114 @@ function App() {
     }
   };
 
+  const loadAdminData = async () => {
+    if (!authToken || currentUser?.role !== 'admin') return;
+    setAdminLoading(true);
+    setAdminError(null);
+    try {
+      const headers = { Authorization: `Bearer ${authToken}` };
+      const [usersResponse, slotsResponse] = await Promise.all([
+        fetch('/api/admin/users', { headers }),
+        fetch('/api/slots', { headers })
+      ]);
+      const usersPayload = await usersResponse.json();
+      const slotsPayload = await slotsResponse.json();
+      if (!usersResponse.ok) {
+        throw new Error(usersPayload.error?.message || usersPayload.message || 'Unable to load users');
+      }
+      if (!slotsResponse.ok) {
+        throw new Error(slotsPayload.error?.message || slotsPayload.message || 'Unable to load tutor listings');
+      }
+      setAdminUsers(usersPayload.data || []);
+      setAdminSlots(slotsPayload.data || []);
+    } catch (err) {
+      setAdminError(err.message || 'Unable to load admin dashboard');
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser?.role === 'admin' && authToken) {
+      loadAdminData();
+    } else {
+      setAdminUsers([]);
+      setAdminSlots([]);
+      setAdminError(null);
+      setAdminMessage(null);
+    }
+  }, [currentUser, authToken]);
+
+  const toggleUserSuspension = async (user) => {
+    const suspended = !user.is_suspended;
+    const action = suspended ? 'suspend' : 'reactivate';
+    if (!window.confirm(`Are you sure you want to ${action} ${user.name}?`)) return;
+    setAdminActionId(`user-${user.id}`);
+    setAdminMessage(null);
+    setAdminError(null);
+    try {
+      const response = await fetch(`/api/admin/users/${user.id}/suspension`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ suspended })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error?.message || payload.message || `Unable to ${action} user`);
+      setAdminUsers((users) => users.map((item) => item.id === user.id ? { ...item, ...payload.user } : item));
+      setAdminMessage(payload.message || `User ${action}d successfully.`);
+    } catch (err) {
+      setAdminError(err.message);
+    } finally {
+      setAdminActionId(null);
+    }
+  };
+
+  const removeAdminSlot = async (slot) => {
+    if (!window.confirm(`Remove the listing for ${slot.subject || 'this subject'}?`)) return;
+    setAdminActionId(`slot-${slot.id}`);
+    setAdminMessage(null);
+    setAdminError(null);
+    try {
+      const response = await fetch(`/api/admin/slots/${slot.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error?.message || payload.message || 'Unable to remove listing');
+      setAdminSlots((items) => items.filter((item) => item.id !== slot.id));
+      setAdminMessage(payload.message || 'Listing removed successfully.');
+      await searchSlots();
+    } catch (err) {
+      setAdminError(err.message);
+    } finally {
+      setAdminActionId(null);
+    }
+  };
+
+  const runAdminCleanup = async () => {
+    if (!window.confirm('Run the data-retention cleanup now? Eligible user data may be anonymized. This cannot be undone.')) return;
+    setAdminActionId('cleanup');
+    setAdminMessage(null);
+    setAdminError(null);
+    try {
+      const response = await fetch('/api/admin/cleanup/run', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error?.message || payload.message || 'Cleanup failed');
+      setAdminMessage(`Cleanup completed. ${payload.data?.purged_count ?? payload.data?.purgedCount ?? 0} account(s) processed.`);
+      await loadAdminData();
+    } catch (err) {
+      setAdminError(err.message);
+    } finally {
+      setAdminActionId(null);
+    }
+  };
+
   const slotsByDate = useMemo(() => slots.reduce((groups, slot) => {
     const date = new Date(slot.start_time).toLocaleDateString(undefined, {
       weekday: 'short', month: 'short', day: 'numeric'
@@ -577,6 +693,96 @@ function App() {
       </header>
 
       <main>
+        {currentUser?.role === 'admin' && (
+          <section className="glass-card" id="admin-dashboard" style={{ marginBottom: '1.5rem' }}>
+            <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div>
+                <span style={{ fontSize: '1.25rem', fontWeight: 700 }}>🛡️ Admin Dashboard</span>
+                <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '0.2rem 0 0' }}>
+                  Manage user accounts, tutor listings and data retention.
+                </p>
+              </div>
+              <button type="button" className="btn-secondary" onClick={loadAdminData} disabled={adminLoading}>
+                {adminLoading ? 'Refreshing...' : '↻ Refresh dashboard'}
+              </button>
+            </div>
+
+            {adminError && <p className="message error-message" role="alert">{adminError}</p>}
+            {adminMessage && <p className="message success-message" role="status">{adminMessage}</p>}
+            {adminLoading && <p style={{ color: '#cbd5e1' }}>Loading admin information...</p>}
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', margin: '1rem 0' }}>
+              <div style={{ padding: '1rem', borderRadius: '10px', background: 'rgba(255,255,255,0.05)' }}>
+                <div style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Registered users</div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 700 }}>{adminUsers.length}</div>
+              </div>
+              <div style={{ padding: '1rem', borderRadius: '10px', background: 'rgba(255,255,255,0.05)' }}>
+                <div style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Tutor listings returned by API</div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 700 }}>{adminSlots.length}</div>
+              </div>
+              <div style={{ padding: '1rem', borderRadius: '10px', background: 'rgba(255,255,255,0.05)' }}>
+                <div style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Suspended accounts</div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 700 }}>{adminUsers.filter((user) => user.is_suspended).length}</div>
+              </div>
+            </div>
+
+            <h3 style={{ margin: '1.25rem 0 0.75rem' }}>User management</h3>
+            {adminUsers.length === 0 && !adminLoading ? (
+              <p style={{ color: '#94a3b8' }}>No user records were returned.</p>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '620px' }}>
+                  <thead><tr style={{ textAlign: 'left', color: '#94a3b8', borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
+                    <th style={{ padding: '0.7rem' }}>User</th><th style={{ padding: '0.7rem' }}>Role</th><th style={{ padding: '0.7rem' }}>Verification</th><th style={{ padding: '0.7rem' }}>Status</th><th style={{ padding: '0.7rem' }}>Action</th>
+                  </tr></thead>
+                  <tbody>
+                    {adminUsers.map((user) => (
+                      <tr key={user.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                        <td style={{ padding: '0.7rem' }}><strong>{user.name}</strong><br /><span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>{user.email}</span></td>
+                        <td style={{ padding: '0.7rem' }}>{user.role}</td>
+                        <td style={{ padding: '0.7rem' }}>{user.is_verified ? 'Verified' : 'Not verified'}</td>
+                        <td style={{ padding: '0.7rem' }}>{user.is_suspended ? 'Suspended' : 'Active'}</td>
+                        <td style={{ padding: '0.7rem' }}>
+                          <button type="button" className={user.is_suspended ? 'btn' : 'btn-secondary'} disabled={adminActionId === `user-${user.id}` || (user.id === currentUser.id && !user.is_suspended)} onClick={() => toggleUserSuspension(user)}>
+                            {adminActionId === `user-${user.id}` ? 'Please wait...' : user.is_suspended ? 'Reactivate' : 'Suspend'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <h3 style={{ margin: '1.5rem 0 0.75rem' }}>Tutor listing moderation</h3>
+            {adminSlots.length === 0 ? (
+              <p style={{ color: '#94a3b8' }}>No listings are currently returned by the slots API.</p>
+            ) : (
+              <div style={{ display: 'grid', gap: '0.65rem' }}>
+                {adminSlots.map((slot) => (
+                  <div key={slot.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', padding: '0.8rem', borderRadius: '10px', background: 'rgba(255,255,255,0.04)' }}>
+                    <div>
+                      <strong>{slot.subject || 'Tutoring listing'}</strong>
+                      <div style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Listing #{slot.id}{slot.tutor_name ? ` · ${slot.tutor_name}` : ''}{slot.start_time ? ` · ${new Date(slot.start_time).toLocaleString()}` : ''}</div>
+                    </div>
+                    <button type="button" className="btn-secondary" disabled={adminActionId === `slot-${slot.id}`} onClick={() => removeAdminSlot(slot)}>
+                      {adminActionId === `slot-${slot.id}` ? 'Removing...' : 'Remove listing'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+              <h3 style={{ margin: '0 0 0.4rem' }}>Data retention</h3>
+              <p style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Run the configured cleanup process for accounts that have reached the retention threshold. Eligible data may be anonymized.</p>
+              <button type="button" className="btn-secondary" disabled={adminActionId === 'cleanup'} onClick={runAdminCleanup}>
+                {adminActionId === 'cleanup' ? 'Running cleanup...' : 'Run data cleanup'}
+              </button>
+            </div>
+          </section>
+        )}
+
         {/* Availability Search & Booking Section */}
         <section className="glass-card search-card" id="slot-search">
           <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -664,7 +870,6 @@ function App() {
               </div>
             )}
           </div>
-
           {/* Main Filter Dropdown Controls */}
           <form className="search-form" onSubmit={searchSlots}>
             <label>
